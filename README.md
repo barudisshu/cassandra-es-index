@@ -513,6 +513,7 @@ mapping-\<type> | {} | For each secondary index, the table name is passed as a t
 unicast-hosts | http://localhost:9200 | A comma separated list of host, can be host1,host2,host3 or http://host1,http://host2,http://host3 or http://host1:9200,http://host2:9200,http://host3:9200. If protocol or port are missing http and 9200 assumed. It is possible to use https.
 discard-nulls | **true** | Do not pass null values to ES index, it means you won't be able to delete a value. **Default is true**.
 index-properties | {} | Properties as a JSON string, passed to create a new index, may contain tokenizer definitions for example.
+skip-serialized-fields | {} | A coma separated string defining that a string column will not be stored in elasticsearch. 
 json-serialized-fields | {}	| A coma separated string defining that a string column must be indexed as a JSON string. Non-JSON parsable strings will prevent inserts in Cassandra.
 json-flat-serialized-fields | {} | A coma separated string defining that a string column must be indexed as a type-safe JSON document. Elasticsearch json mapping does not allow to index a value that will change type over time. For example {"key":"value"} can't become {"key":{"subkey":"value"}} in Elasticsearch you'll get a mapping exception. Such JSON-flat will be converter into a JSON object that have string keys and arrays of string as values.
 dummy | false | Completely disables secondary index. Note that if Jest classes are not found the index will be put into dummy mode automatically.

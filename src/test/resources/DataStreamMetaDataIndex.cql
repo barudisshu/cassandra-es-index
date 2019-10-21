@@ -1,0 +1,1 @@
+CREATE CUSTOM INDEX "TestKeyspace_DataStreamMetaData_rowKeySearch_index" ON "TestKeyspace"."DataStreamMetaData" ("rowKeySearch") USING 'com.ericsson.godzilla.cassandra.index.EsSecondaryIndex' with OPTIONS = {'unicast-host': '192.168.189.128:9200'};

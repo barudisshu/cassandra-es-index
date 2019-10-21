@@ -13,7 +13,7 @@ CREATE TABLE emails (
 );  
 
 CREATE CUSTOM INDEX ON emails(query) 
-USING 'com.genesyslab.webme.commons.index.EsSecondaryIndex'
+USING 'com.ericsson.godzilla.cassandra.index.EsSecondaryIndex'
 WITH OPTIONS = {'unicast-hosts': 'localhost:9200'};
 
 INSERT INTO emails (id, subject, body, userid)
@@ -49,6 +49,6 @@ select id, subject, body, userid, query  from emails where query='body:cassandra
 (1 rows)
 
 CREATE CUSTOM INDEX ON emails(query) 
-USING 'com.genesyslab.webme.commons.index.EsSecondaryIndex'
+USING 'com.ericsson.godzilla.cassandra.index.EsSecondaryIndex'
 WITH OPTIONS = {'unicast-hosts': 'localhost:9200', 'mapping-emails': '{ "emails": {"date_detection": false,"numeric_detection": false,"properties": {"id": {"type": "keyword"},"userid": {"type": "long"},"subject" : {"type" : "text","fields" : {"keyword" : {"type" : "keyword","ignore_above" : 256}}},"body" : {"type" : "text"},"IndexationDate": {"type": "date","format": "yyyy-MM-dd''T''HH:mm:ss.SSS''Z''"},"_cassandraTtl": {"type": "long"}}}}'};
 
