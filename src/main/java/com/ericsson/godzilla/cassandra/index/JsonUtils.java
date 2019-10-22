@@ -1,15 +1,15 @@
 /*
-* Copyright Ericsson AB 2019 - All Rights Reserved.
-* The copyright to the computer program(s) herein is the property of Ericsson AB.
-* The programs may be used and/or copied only with written permission from Ericsson AB
-* or in accordance with the terms and conditions stipulated in the agreement/contract under which the program(s) have been supplied.
-*/
+ * Copyright Ericsson AB 2019 - All Rights Reserved.
+ * The copyright to the computer program(s) herein is the property of Ericsson AB.
+ * The programs may be used and/or copied only with written permission from Ericsson AB
+ * or in accordance with the terms and conditions stipulated in the agreement/contract under which the program(s) have been supplied.
+ */
 package com.ericsson.godzilla.cassandra.index;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-
+import io.searchbox.client.JestResult;
 import org.codehaus.jackson.JsonFactory;
 import org.codehaus.jackson.JsonGenerator;
 import org.codehaus.jackson.map.ObjectMapper;
@@ -17,21 +17,13 @@ import org.codehaus.jackson.type.TypeReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.text.SimpleDateFormat;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.TimeZone;
+import java.util.*;
 import java.util.function.Predicate;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-
-import io.searchbox.client.JestResult;
 
 import static org.codehaus.jackson.JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS;
 import static org.codehaus.jackson.JsonParser.Feature.ALLOW_SINGLE_QUOTES;
@@ -54,14 +46,13 @@ public class JsonUtils {
 
   @Nonnull
   static Map<String, String> jsonStringToStringMap(@Nonnull String jsonString) throws IOException {
-    return OBJECT_MAPPER.readValue(jsonString, new TypeReference<HashMap<String, String>>() {
-    });
+    return OBJECT_MAPPER.readValue(jsonString, new TypeReference<HashMap<String, String>>() {});
   }
 
   @Nonnull
-  private static Map<String, Object> jsonStringToObjectMap(@Nonnull String jsonString) throws IOException {
-    return OBJECT_MAPPER.readValue(jsonString, new TypeReference<Map<String, Object>>() {
-    });
+  private static Map<String, Object> jsonStringToObjectMap(@Nonnull String jsonString)
+      throws IOException {
+    return OBJECT_MAPPER.readValue(jsonString, new TypeReference<Map<String, Object>>() {});
   }
 
   @Nonnull
@@ -70,7 +61,8 @@ public class JsonUtils {
   }
 
   /**
-   * Transform the JSON to a map:string,string[] because ES won't support values of different types for the same key
+   * Transform the JSON to a map:string,string[] because ES won't support values of different types
+   * for the same key
    */
   @Nonnull
   static String flatten(@Nonnull String jsonString) throws IOException {
@@ -84,21 +76,23 @@ public class JsonUtils {
       builder.writeFieldName(entry.getKey());
       builder.writeStartArray();
 
-      //sub-maps are transformed in arrays of key-values
-      //this allows searching for NAME:key=value
+      // sub-maps are transformed in arrays of key-values
+      // this allows searching for NAME:key=value
       if (value instanceof Map<?, ?>) {
         for (Map.Entry<?, ?> subEntry : ((Map<?, ?>) value).entrySet()) {
-          builder.writeString(String.format("%s=%s", String.valueOf(subEntry.getKey()), String.valueOf(subEntry.getValue())));
+          builder.writeString(
+              String.format(
+                  "%s=%s", String.valueOf(subEntry.getKey()), String.valueOf(subEntry.getValue())));
         }
-      } else if (value instanceof Object[]) { //arrays to arrays of string
+      } else if (value instanceof Object[]) { // arrays to arrays of string
         for (Object object : ((Object[]) value)) {
           builder.writeString(String.valueOf(object));
         }
-      } else if (value instanceof Collection) { //Collections to arrays of string
+      } else if (value instanceof Collection) { // Collections to arrays of string
         for (Object object : ((Collection<?>) value)) {
           builder.writeString(String.valueOf(object));
         }
-      } else { //single values in their string representations
+      } else { // single values in their string representations
         builder.writeString(String.valueOf(value));
       }
       builder.writeEndArray();
@@ -110,9 +104,7 @@ public class JsonUtils {
     return stringWriter.toString();
   }
 
-  /**
-   * 2016-01-05T13:49:25.143Z
-   */
+  /** 2016-01-05T13:49:25.143Z */
   @Nonnull
   static String getIso8601Date(@Nonnull Date date) {
     SimpleDateFormat dateFormat = new SimpleDateFormat(EXTENDED_ISO8601_FORMAT);
@@ -156,7 +148,7 @@ public class JsonUtils {
 
   /**
    * @param result JestResult to extract
-   * @param keys   the key chain to go through
+   * @param keys the key chain to go through
    * @return an empty JsonObject if key chain not found
    */
   @Nonnull
@@ -199,7 +191,7 @@ public class JsonUtils {
 
   /**
    * @param jsonObject object to filter
-   * @param keys       keys to remove
+   * @param keys keys to remove
    * @return a copy as deep as key.length
    */
   @Nonnull
@@ -213,7 +205,7 @@ public class JsonUtils {
 
   /**
    * @param jsonObject object to filter
-   * @param path       path to the key to remove
+   * @param path path to the key to remove
    * @return a copy as deep as key.length
    */
   @Nonnull
@@ -224,42 +216,50 @@ public class JsonUtils {
     } else {
       JsonObject result = new JsonObject();
 
-      jsonObject.entrySet().forEach(e -> {
-        String key = e.getKey();
-        JsonElement value = e.getValue();
-        if (path[0].equals(e.getKey())) {
-          if (path.length > 1) { // if length == 1, this is the key to remove
-            if (value instanceof JsonObject) { // if value is an object, filter further
-              value = JsonUtils.filterPath((JsonObject) value, Arrays.copyOfRange(path, 1, path.length));
-            }
-            result.add(key, value);
-          }
-        } else {
-          result.add(key, value);
-        }
-      });
+      jsonObject
+          .entrySet()
+          .forEach(
+              e -> {
+                String key = e.getKey();
+                JsonElement value = e.getValue();
+                if (path[0].equals(e.getKey())) {
+                  if (path.length > 1) { // if length == 1, this is the key to remove
+                    if (value instanceof JsonObject) { // if value is an object, filter further
+                      value =
+                          JsonUtils.filterPath(
+                              (JsonObject) value, Arrays.copyOfRange(path, 1, path.length));
+                    }
+                    result.add(key, value);
+                  }
+                } else {
+                  result.add(key, value);
+                }
+              });
       return result;
     }
   }
 
   /**
    * @param jsonObject object to filter
-   * @param predicate  matching predicate will keep the keys
+   * @param predicate matching predicate will keep the keys
    * @return a shallow copy
    */
   @Nonnull
-  public static JsonObject filter(@Nonnull JsonObject jsonObject, @Nonnull Predicate<String> predicate) {
+  public static JsonObject filter(
+      @Nonnull JsonObject jsonObject, @Nonnull Predicate<String> predicate) {
     JsonObject res = new JsonObject();
 
-    jsonObject.entrySet().forEach(e -> {
-      if (predicate.test(e.getKey())) {
-        res.add(e.getKey(), e.getValue());
-      }
-    });
+    jsonObject
+        .entrySet()
+        .forEach(
+            e -> {
+              if (predicate.test(e.getKey())) {
+                res.add(e.getKey(), e.getValue());
+              }
+            });
 
     return res;
   }
-
 
   @Nonnull
   static String unQuote(@Nonnull String string) {
@@ -267,7 +267,7 @@ public class JsonUtils {
   }
 
   /**
-   * @param main  elements of this json will overwrite the other's params
+   * @param main elements of this json will overwrite the other's params
    * @param other will be overwritten by main if same keys exists
    * @return null if both are null, if one is null the other is returned
    */

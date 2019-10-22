@@ -1,13 +1,12 @@
 /*
-* Copyright Ericsson AB 2019 - All Rights Reserved.
-* The copyright to the computer program(s) herein is the property of Ericsson AB.
-* The programs may be used and/or copied only with written permission from Ericsson AB
-* or in accordance with the terms and conditions stipulated in the agreement/contract under which the program(s) have been supplied.
-*/
+ * Copyright Ericsson AB 2019 - All Rights Reserved.
+ * The copyright to the computer program(s) herein is the property of Ericsson AB.
+ * The programs may be used and/or copied only with written permission from Ericsson AB
+ * or in accordance with the terms and conditions stipulated in the agreement/contract under which the program(s) have been supplied.
+ */
 package com.ericsson.godzilla.cassandra.index;
 
 import com.google.common.base.Stopwatch;
-
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.compaction.CompactionInfo;
 import org.apache.cassandra.db.compaction.CompactionInterruptedException;
@@ -24,9 +23,7 @@ import java.util.Collection;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-/**
- * Index building task that reads all live SSTables and index the content
- */
+/** Index building task that reads all live SSTables and index the content */
 public class EsIndexBuilder extends SecondaryIndexBuilder {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(EsIndexBuilder.class);
@@ -50,37 +47,62 @@ public class EsIndexBuilder extends SecondaryIndexBuilder {
   @Override
   public void build() {
     final Stopwatch stopwatch = Stopwatch.createStarted();
-    LOGGER.info("{} build {} starting on {} ssTables with {} rows to index", index.name, compactionId, ssTables.size(), total);
+    LOGGER.info(
+        "{} build {} starting on {} ssTables with {} rows to index",
+        index.name,
+        compactionId,
+        ssTables.size(),
+        total);
 
     if (index.indexConfig.isTruncateBeforeRebuild()) {
       index.esIndex.truncate();
     }
 
-    //For each of the SSTables, we get a partition scanner, for each partition we get its row and we index it
-    ssTables.forEach(ssTableReader -> ssTableReader.getScanner()
-        .forEachRemaining(partition -> {
-              partition.forEachRemaining(row -> {
-                if (isStopRequested()) {
-                  LOGGER.warn("{} build {} stop requested {}/{} rows", index.name, compactionId, processed, total);
-                  throw new CompactionInterruptedException(getCompactionInfo());
-                }
+    // For each of the SSTables, we get a partition scanner, for each partition we get its row and
+    // we index it
+    ssTables.forEach(
+        ssTableReader ->
+            ssTableReader
+                .getScanner()
+                .forEachRemaining(
+                    partition -> {
+                      partition.forEachRemaining(
+                          row -> {
+                            if (isStopRequested()) {
+                              LOGGER.warn(
+                                  "{} build {} stop requested {}/{} rows",
+                                  index.name,
+                                  compactionId,
+                                  processed,
+                                  total);
+                              throw new CompactionInterruptedException(getCompactionInfo());
+                            }
 
-                DecoratedKey key = partition.partitionKey();
-                if (row instanceof Row) { //not sure what else it could be
-                  index.index(key, (Row) row, null, FBUtilities.nowInSeconds());
-                } else {
-                  LOGGER.warn("{} build {} skipping unsupported {} {}", index.name, compactionId, row.getClass().getName(), key);
-                }
-                processed++;
-              });
-            }
-        )
-    );
+                            DecoratedKey key = partition.partitionKey();
+                            if (row instanceof Row) { // not sure what else it could be
+                              index.index(key, (Row) row, null, FBUtilities.nowInSeconds());
+                            } else {
+                              LOGGER.warn(
+                                  "{} build {} skipping unsupported {} {}",
+                                  index.name,
+                                  compactionId,
+                                  row.getClass().getName(),
+                                  key);
+                            }
+                            processed++;
+                          });
+                    }));
 
-    LOGGER.info("{} build {} completed in {} minutes for {} rows", index.name, compactionId, stopwatch.elapsed(TimeUnit.MINUTES), total);
+    LOGGER.info(
+        "{} build {} completed in {} minutes for {} rows",
+        index.name,
+        compactionId,
+        stopwatch.elapsed(TimeUnit.MINUTES),
+        total);
   }
 
   public CompactionInfo getCompactionInfo() {
-    return new CompactionInfo(null, OperationType.INDEX_BUILD, processed, total, null, compactionId);
+    return new CompactionInfo(
+        null, OperationType.INDEX_BUILD, processed, total, null, compactionId);
   }
 }

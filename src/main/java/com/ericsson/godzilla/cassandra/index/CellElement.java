@@ -1,30 +1,30 @@
 /*
-* Copyright Ericsson AB 2019 - All Rights Reserved.
-* The copyright to the computer program(s) herein is the property of Ericsson AB.
-* The programs may be used and/or copied only with written permission from Ericsson AB
-* or in accordance with the terms and conditions stipulated in the agreement/contract under which the program(s) have been supplied.
-*/
+ * Copyright Ericsson AB 2019 - All Rights Reserved.
+ * The copyright to the computer program(s) herein is the property of Ericsson AB.
+ * The programs may be used and/or copied only with written permission from Ericsson AB
+ * or in accordance with the terms and conditions stipulated in the agreement/contract under which the program(s) have been supplied.
+ */
 package com.ericsson.godzilla.cassandra.index;
 
 import org.apache.cassandra.utils.Pair;
 
-import java.util.List;
-
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.util.List;
 
 /**
- * Holds all cell values for ES operations
- * <br/> Warning: hashCode() and equals() only uses "name" value.
+ * Holds all cell values for ES operations <br>
+ * Warning: hashCode() and equals() only uses "name" value.
  */
 public class CellElement {
 
   List<Pair<String, String>> clusteringKeys;
   public String name;
   public String value;
-  CollectionValue collectionValue; //can be null if CF has no collections
+  CollectionValue collectionValue; // can be null if CF has no collections
 
-  public static CellElement create(@Nonnull String name, @Nullable String value, @Nullable CollectionValue collectionValue) {
+  public static CellElement create(
+      @Nonnull String name, @Nullable String value, @Nullable CollectionValue collectionValue) {
     CellElement elem = new CellElement();
     elem.name = name;
     elem.value = value;
@@ -52,7 +52,8 @@ public class CellElement {
     CollectionType type;
 
     @Nonnull
-    public static CollectionValue create(@Nonnull String name, @Nullable String value, @Nonnull CollectionType type) {
+    public static CollectionValue create(
+        @Nonnull String name, @Nullable String value, @Nonnull CollectionType type) {
       CollectionValue val = new CollectionValue();
       val.name = name;
       val.value = value;
@@ -62,13 +63,10 @@ public class CellElement {
 
     public enum CollectionType {
       MAP,
-      /**
-       * JSON is used for UDT and tuples
-       **/
+      /** JSON is used for UDT and tuples */
       JSON,
       SET,
       LIST
     }
   }
-
 }

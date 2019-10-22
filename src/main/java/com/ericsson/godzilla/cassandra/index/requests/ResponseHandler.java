@@ -1,29 +1,24 @@
 /*
-* Copyright Ericsson AB 2019 - All Rights Reserved.
-* The copyright to the computer program(s) herein is the property of Ericsson AB.
-* The programs may be used and/or copied only with written permission from Ericsson AB
-* or in accordance with the terms and conditions stipulated in the agreement/contract under which the program(s) have been supplied.
-*/
+ * Copyright Ericsson AB 2019 - All Rights Reserved.
+ * The copyright to the computer program(s) herein is the property of Ericsson AB.
+ * The programs may be used and/or copied only with written permission from Ericsson AB
+ * or in accordance with the terms and conditions stipulated in the agreement/contract under which the program(s) have been supplied.
+ */
 package com.ericsson.godzilla.cassandra.index.requests;
-
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import javax.annotation.Nonnull;
 
 import io.searchbox.action.Action;
 import io.searchbox.client.JestResult;
 import io.searchbox.client.JestResultHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javax.annotation.Nonnull;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.ericsson.godzilla.cassandra.index.EsSecondaryIndex.DEBUG_SHOW_VALUES;
 
-/**
- * Wraps a Jest response to allow logging and blocking waiting for a response
- */
+/** Wraps a Jest response to allow logging and blocking waiting for a response */
 public class ResponseHandler<T extends JestResult> implements JestResultHandler<T> {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(ResponseHandler.class);
@@ -41,7 +36,8 @@ public class ResponseHandler<T extends JestResult> implements JestResultHandler<
     this.typeName = typeName;
     this.request = request;
     if (LOGGER.isTraceEnabled()) {
-      LOGGER.trace("Handling ES request #{} {} {}", request.hashCode(), request.toString(), typeName);
+      LOGGER.trace(
+          "Handling ES request #{} {} {}", request.hashCode(), request.toString(), typeName);
     }
   }
 
@@ -51,7 +47,8 @@ public class ResponseHandler<T extends JestResult> implements JestResultHandler<
     isCompleted.set(true);
     semaphore.release();
     if (LOGGER.isTraceEnabled()) {
-      LOGGER.trace("Completed ES request #{} {} {}", request.hashCode(), request.toString(), typeName);
+      LOGGER.trace(
+          "Completed ES request #{} {} {}", request.hashCode(), request.toString(), typeName);
     }
   }
 
@@ -60,7 +57,8 @@ public class ResponseHandler<T extends JestResult> implements JestResultHandler<
     this.exception = ex;
     isCompleted.set(true);
     semaphore.release();
-    LOGGER.error("Failed ES request #{} {} {} {}", request.hashCode(), request.toString(), typeName, ex);
+    LOGGER.error(
+        "Failed ES request #{} {} {} {}", request.hashCode(), request.toString(), typeName, ex);
   }
 
   /**
@@ -109,7 +107,7 @@ public class ResponseHandler<T extends JestResult> implements JestResultHandler<
     if (!isCompleted.get()) {
       try {
         semaphore.acquire();
-        semaphore.release(); //potentially release other threads
+        semaphore.release(); // potentially release other threads
       } catch (InterruptedException e) {
         throw new RuntimeException(e);
       }
@@ -119,13 +117,21 @@ public class ResponseHandler<T extends JestResult> implements JestResultHandler<
     }
 
     if (assertSuccess && !result.isSucceeded()) {
-      LOGGER.error("Received error to request #{} {} {}, details: {}",
-          request.hashCode(), request.toString(), typeName, resultString(result, true));
+      LOGGER.error(
+          "Received error to request #{} {} {}, details: {}",
+          request.hashCode(),
+          request.toString(),
+          typeName,
+          resultString(result, true));
       throw new EsRequestExecutionException(result.getResponseCode(), result.getErrorMessage());
 
     } else if (LOGGER.isTraceEnabled()) {
-      LOGGER.trace("Received response to request #{} {} {}, details: {}",
-          request.hashCode(), request.toString(), typeName, resultString(result, DEBUG_SHOW_VALUES));
+      LOGGER.trace(
+          "Received response to request #{} {} {}, details: {}",
+          request.hashCode(),
+          request.toString(),
+          typeName,
+          resultString(result, DEBUG_SHOW_VALUES));
     }
 
     return result;
@@ -134,9 +140,15 @@ public class ResponseHandler<T extends JestResult> implements JestResultHandler<
   @Nonnull
   private String resultString(@Nonnull T res, boolean showJson) {
     if (showJson) {
-      return String.format(JSON_FMT, res.getResponseCode(), res.getErrorMessage(), res.getPathToResult(), res.getJsonString());
+      return String.format(
+          JSON_FMT,
+          res.getResponseCode(),
+          res.getErrorMessage(),
+          res.getPathToResult(),
+          res.getJsonString());
     } else {
-      return String.format(SHORT_FMT, res.getResponseCode(), res.getErrorMessage(), res.getPathToResult());
+      return String.format(
+          SHORT_FMT, res.getResponseCode(), res.getErrorMessage(), res.getPathToResult());
     }
   }
 }

@@ -1,35 +1,24 @@
 /*
-* Copyright Ericsson AB 2019 - All Rights Reserved.
-* The copyright to the computer program(s) herein is the property of Ericsson AB.
-* The programs may be used and/or copied only with written permission from Ericsson AB
-* or in accordance with the terms and conditions stipulated in the agreement/contract under which the program(s) have been supplied.
-*/
+ * Copyright Ericsson AB 2019 - All Rights Reserved.
+ * The copyright to the computer program(s) herein is the property of Ericsson AB.
+ * The programs may be used and/or copied only with written permission from Ericsson AB
+ * or in accordance with the terms and conditions stipulated in the agreement/contract under which the program(s) have been supplied.
+ */
 package com.ericsson.godzilla.cassandra.index.monitor;
 
 import com.ericsson.godzilla.cassandra.index.requests.GenericRequest;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.lang.management.ManagementFactory;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import javax.management.InstanceAlreadyExistsException;
-import javax.management.MBeanRegistrationException;
-import javax.management.MalformedObjectNameException;
-import javax.management.NotCompliantMBeanException;
-import javax.management.ObjectName;
-
 import io.searchbox.action.Action;
 import io.searchbox.client.JestClient;
 import io.searchbox.client.JestResult;
-import io.searchbox.cluster.Health;
-import io.searchbox.cluster.NodesStats;
-import io.searchbox.cluster.PendingClusterTasks;
-import io.searchbox.cluster.State;
-import io.searchbox.cluster.Stats;
+import io.searchbox.cluster.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import javax.management.*;
+import java.io.IOException;
+import java.lang.management.ManagementFactory;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -40,11 +29,12 @@ public class EsJmxBridge implements EsJmxBridgeMXBean {
   private final JestClient client;
 
   public EsJmxBridge(JestClient client)
-      throws MalformedObjectNameException, NotCompliantMBeanException, InstanceAlreadyExistsException, MBeanRegistrationException {
+      throws MalformedObjectNameException, NotCompliantMBeanException,
+          InstanceAlreadyExistsException, MBeanRegistrationException {
     this.client = client;
 
     LOGGER.info("Registering ES JMX bridge");
-    //Get the MBean server and register the MBean
+    // Get the MBean server and register the MBean
     ManagementFactory.getPlatformMBeanServer().registerMBean(this, new ObjectName(NAME));
     LOGGER.info("Registration of '{}' successful", NAME);
   }
@@ -55,8 +45,7 @@ public class EsJmxBridge implements EsJmxBridgeMXBean {
   }
 
   @Override
-  public void setTimeout(long timeout) {
-  }
+  public void setTimeout(long timeout) {}
 
   @Override
   @Nonnull

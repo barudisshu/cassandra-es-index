@@ -1,29 +1,25 @@
 /*
-* Copyright Ericsson AB 2019 - All Rights Reserved.
-* The copyright to the computer program(s) herein is the property of Ericsson AB.
-* The programs may be used and/or copied only with written permission from Ericsson AB
-* or in accordance with the terms and conditions stipulated in the agreement/contract under which the program(s) have been supplied.
-*/
+ * Copyright Ericsson AB 2019 - All Rights Reserved.
+ * The copyright to the computer program(s) herein is the property of Ericsson AB.
+ * The programs may be used and/or copied only with written permission from Ericsson AB
+ * or in accordance with the terms and conditions stipulated in the agreement/contract under which the program(s) have been supplied.
+ */
 package com.ericsson.godzilla.cassandra.index.config;
 
 import com.google.gson.JsonObject;
-
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.exceptions.ConfigurationException;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-
 import static java.lang.System.getProperty;
 import static java.util.Arrays.asList;
 
-/**
- * The consts defined here are related to godzilla configuration
- */
+/** The consts defined here are related to godzilla configuration */
 public interface IndexConfig {
   // prefix for system options
   String ES_CONFIG_PREFIX = "godzilla-es-";
@@ -31,17 +27,46 @@ public interface IndexConfig {
   String ES_ID_SEPARATOR = getProperty(ES_CONFIG_PREFIX + "id-separator", "@");
 
   // Settings that can be updated on an existing index
-  List<String> UPDATABLE_SETTINGS = asList(getProperty(ES_CONFIG_PREFIX + "index.updatable.settings", "refresh_interval").split(","));
+  List<String> UPDATABLE_SETTINGS =
+      asList(
+          getProperty(ES_CONFIG_PREFIX + "index.updatable.settings", "refresh_interval")
+              .split(","));
 
-  // Both of those consts are for settings that ES 5.x does not support anymore, we need to filter them out
-  String[] SETTINGS_TO_SKIP = getProperty(ES_CONFIG_PREFIX + "index.settings.skipped", "").split(",");
-  String[] KNOWN_LEGACY_SETTINGS = {"client-only", "cluster-name", "unicast-hosts", "script.disable_dynamic", "cors-enabled",
-      "http-enabled", "node-data", "insert-version-type", "update-version-type",
-      // ES custom plugins
-      "response-filter-regexp-type", "read-only-urls-regexp", "http-read-only", "http-filter", "response-filter-regexp", "log-node-name",
-      // UCS E2E
-      "network.host", "http.host", "http.port", "transport.tcp.port", "path.data", "path-data", "index.network.host", "index.http.host",
-      "index.http.port", "index.transport.tcp.port", "index.path.data", "index.path-data"};
+  // Both of those consts are for settings that ES 5.x does not support anymore, we need to filter
+  // them out
+  String[] SETTINGS_TO_SKIP =
+      getProperty(ES_CONFIG_PREFIX + "index.settings.skipped", "").split(",");
+  String[] KNOWN_LEGACY_SETTINGS = {
+    "client-only",
+    "cluster-name",
+    "unicast-hosts",
+    "script.disable_dynamic",
+    "cors-enabled",
+    "http-enabled",
+    "node-data",
+    "insert-version-type",
+    "update-version-type",
+    // ES custom plugins
+    "response-filter-regexp-type",
+    "read-only-urls-regexp",
+    "http-read-only",
+    "http-filter",
+    "response-filter-regexp",
+    "log-node-name",
+    // UCS E2E
+    "network.host",
+    "http.host",
+    "http.port",
+    "transport.tcp.port",
+    "path.data",
+    "path-data",
+    "index.network.host",
+    "index.http.host",
+    "index.http.port",
+    "index.transport.tcp.port",
+    "index.path.data",
+    "index.path-data"
+  };
 
   // Below are configurable options @Since 8.5
   String ES_INDEX_PROPERTIES = "index-properties"; // custom index properties from C* index creation
@@ -91,9 +116,10 @@ public interface IndexConfig {
   String ES_UNICAST_HOSTS = "unicast-hosts";
   String ES_SPECIAL_FIELDS_DELIMITER = ",";
 
-  String ES_JSON_SCHEMA_FIELDS = "json-schema-fields";  // column that will be send to elasticsearch
+  String ES_JSON_SCHEMA_FIELDS = "json-schema-fields"; // column that will be send to elasticsearch
 
-  String ES_JSON_SERIALIZED_FIELDS = "json-serialized-fields"; // String fields that are indexed as JSON
+  String ES_JSON_SERIALIZED_FIELDS =
+      "json-serialized-fields"; // String fields that are indexed as JSON
   String ES_JSON_FLAT_SERIALIZED_FIELDS = "json-flat-serialized-fields";
 
   // New 9.0 options
@@ -131,11 +157,11 @@ public interface IndexConfig {
   int ES_HTTP_PORT_DEF = 9200;
 
   String ES_MAX_CONNECTION_PER_ROUTE = "max-connections-per-route";
-  int ES_MAX_CONNECTION_PER_ROUTE_DEF = 2; //http://dev.bizo.com/2013/04/sensible-defaults-for-apache-httpclient.html
+  int ES_MAX_CONNECTION_PER_ROUTE_DEF =
+      2; // http://dev.bizo.com/2013/04/sensible-defaults-for-apache-httpclient.html
 
   String ES_RETRY_ON_CONFLICT = "retry-on-conflict";
   int ES_RETRY_ON_CONFLICT_DEF = 5;
-
 
   @Nonnull
   Set<String> getPipelines();
@@ -143,15 +169,11 @@ public interface IndexConfig {
   @Nullable
   String getPipeline(@Nonnull String type) throws ConfigurationException;
 
-  /**
-   * @return additional properties for ES index client node, not null!
-   */
+  /** @return additional properties for ES index client node, not null! */
   @Nonnull
   JsonObject getProperties();
 
-  /**
-   * @return Maximum number of results to ask to ES
-   */
+  /** @return Maximum number of results to ask to ES */
   int getMaxResults();
 
   /**
@@ -163,15 +185,11 @@ public interface IndexConfig {
   @Nullable
   String getTypeMapping(@Nonnull String name) throws ConfigurationException;
 
-  /**
-   * @return the list of unicast hosts
-   */
+  /** @return the list of unicast hosts */
   @Nullable
   String getUnicastHosts();
 
-  /**
-   * @return false if null values should be discarded, default is true.
-   */
+  /** @return false if null values should be discarded, default is true. */
   boolean isDiscardNullValues();
 
   /**
@@ -182,20 +200,14 @@ public interface IndexConfig {
   @Nonnull
   Set<String> getJsonSerializedFields();
 
-  /**
-   * @return use async ES operations
-   */
+  /** @return use async ES operations */
   boolean isAsyncWrite();
 
-  /**
-   * @return the ConsistencyLevel used to read Cassandra rows
-   */
+  /** @return the ConsistencyLevel used to read Cassandra rows */
   @Nonnull
   ConsistencyLevel getReadConsistencyLevel();
 
-  /**
-   * @return index segment timeframe
-   */
+  /** @return index segment timeframe */
   @Nullable
   Segment getIndexSegment();
 
@@ -207,54 +219,40 @@ public interface IndexConfig {
   @Nullable
   String getIndexSegmentName(); // UCS-3731
 
-  /**
-   * @return the options provided in Cassandra create index request
-   */
+  /** @return the options provided in Cassandra create index request */
   @Nonnull
   Map<String, String> getIndexOptions();
 
   /**
    * @return the skip properties that we don't need to indexed in elasticsearch, parsable strings
-   * will prevent inserts in Cassandra
+   *     will prevent inserts in Cassandra
    */
   @Nonnull
   Set<String> getJsonSchemaFields();
 
   /**
    * @return returns all the string fields that are json serialized but values are treated as
-   * strings, used when values are not always of the same type
+   *     strings, used when values are not always of the same type
    */
   @Nonnull
   Set<String> getJsonFlatSerializedFields();
 
-  /**
-   * @return true if request should be validated before execution
-   */
+  /** @return true if request should be validated before execution */
   boolean isValidateQuery();
 
-  /**
-   * @return if we need to detected geo location properties
-   */
+  /** @return if we need to detected geo location properties */
   boolean isDetectGeo();
 
-  /**
-   * @return if we need to skip startup commit log replay
-   */
+  /** @return if we need to skip startup commit log replay */
   boolean isSkipLogReplay();
 
-  /**
-   * @return if we discard updates sent to us as a replica
-   */
+  /** @return if we discard updates sent to us as a replica */
   boolean isSkipNonLocalUpdates();
 
-  /**
-   * @return prevent concurrent updates on the same PK for the same type
-   */
+  /** @return prevent concurrent updates on the same PK for the same type */
   boolean isConcurrentLock();
 
-  /**
-   * @return true for analytics mode where we disable delete operation
-   */
+  /** @return true for analytics mode where we disable delete operation */
   boolean isAnalyticMode();
 
   /**
@@ -270,25 +268,21 @@ public interface IndexConfig {
 
   boolean isTruncateBeforeRebuild();
 
-  /**
-   * @return in minutes
-   */
+  /** @return in minutes */
   int getIndexPurgePeriod();
 
-  /**
-   * @return each type will have its own index using keyspace_ as prefix
-   */
+  /** @return each type will have its own index using keyspace_ as prefix */
   boolean isPerIndexType();
 
   /**
    * @return when delete by query to clean ttled docs it's possible to shift that time to keep docs
-   * longer in ES, default is 0
+   *     longer in ES, default is 0
    */
   int getTtlShift();
 
   /**
    * @return periodically delete all document where cassandra TTL expired without relying on
-   * compaction, required with TTL shift
+   *     compaction, required with TTL shift
    */
   boolean isForceDelete();
 
@@ -302,14 +296,10 @@ public interface IndexConfig {
 
   int getMaxTotalConnectionPerRoute();
 
-  /**
-   * For updates only
-   */
+  /** For updates only */
   int getRetryOnConflict();
 
-  /**
-   * HOUR is for testing purposes only!!! Not for production usage
-   */
+  /** HOUR is for testing purposes only!!! Not for production usage */
   enum Segment {
     OFF,
     HOUR,
@@ -317,6 +307,7 @@ public interface IndexConfig {
     TEN,
     MONTH,
     YEAR,
-    CUSTOM // WCC-862 UCS-3731 Free format for the index name (ie not time related). Format label can be anything... accepted by ES ;)
+    CUSTOM // WCC-862 UCS-3731 Free format for the index name (ie not time related). Format label
+           // can be anything... accepted by ES ;)
   }
 }

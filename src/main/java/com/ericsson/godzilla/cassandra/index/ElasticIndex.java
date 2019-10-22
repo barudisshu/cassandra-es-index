@@ -1,20 +1,31 @@
-/*
-* Copyright Ericsson AB 2019 - All Rights Reserved.
-* The copyright to the computer program(s) herein is the property of Ericsson AB.
-* The programs may be used and/or copied only with written permission from Ericsson AB
-* or in accordance with the terms and conditions stipulated in the agreement/contract under which the program(s) have been supplied.
-*/
 package com.ericsson.godzilla.cassandra.index;
-
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
 
 import com.ericsson.godzilla.cassandra.index.config.IndexConfig;
 import com.ericsson.godzilla.cassandra.index.monitor.EsJmxBridge;
 import com.ericsson.godzilla.cassandra.index.requests.ElasticClientFactory;
 import com.ericsson.godzilla.cassandra.index.requests.ResponseHandler;
 import com.ericsson.godzilla.cassandra.index.requests.UpdatePipeline;
-
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import io.searchbox.action.Action;
+import io.searchbox.client.JestClient;
+import io.searchbox.client.JestClientFactory;
+import io.searchbox.client.JestResult;
+import io.searchbox.client.config.HttpClientConfig;
+import io.searchbox.cluster.Health;
+import io.searchbox.core.*;
+import io.searchbox.indices.CreateIndex;
+import io.searchbox.indices.DeleteIndex;
+import io.searchbox.indices.Flush;
+import io.searchbox.indices.IndicesExists;
+import io.searchbox.indices.aliases.AddAliasMapping;
+import io.searchbox.indices.aliases.AliasMapping;
+import io.searchbox.indices.aliases.GetAliases;
+import io.searchbox.indices.aliases.ModifyAliases;
+import io.searchbox.indices.mapping.GetMapping;
+import io.searchbox.indices.mapping.PutMapping;
+import io.searchbox.indices.settings.UpdateSettings;
 import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.Operator;
@@ -38,6 +49,8 @@ import org.codehaus.jackson.map.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nonnull;
+import javax.net.ssl.SSLContext;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.lang.reflect.Constructor;
@@ -46,57 +59,16 @@ import java.nio.ByteBuffer;
 import java.security.KeyManagementException;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import javax.annotation.Nonnull;
-import javax.net.ssl.SSLContext;
-
-import io.searchbox.action.Action;
-import io.searchbox.client.JestClient;
-import io.searchbox.client.JestClientFactory;
-import io.searchbox.client.JestResult;
-import io.searchbox.client.config.HttpClientConfig;
-import io.searchbox.cluster.Health;
-import io.searchbox.core.Count;
-import io.searchbox.core.CountResult;
-import io.searchbox.core.Delete;
-import io.searchbox.core.DeleteByQuery;
-import io.searchbox.core.DocumentResult;
-import io.searchbox.core.Index;
-import io.searchbox.core.Search;
-import io.searchbox.core.Update;
-import io.searchbox.core.Validate;
-import io.searchbox.indices.CreateIndex;
-import io.searchbox.indices.DeleteIndex;
-import io.searchbox.indices.Flush;
-import io.searchbox.indices.IndicesExists;
-import io.searchbox.indices.aliases.AddAliasMapping;
-import io.searchbox.indices.aliases.AliasMapping;
-import io.searchbox.indices.aliases.GetAliases;
-import io.searchbox.indices.aliases.ModifyAliases;
-import io.searchbox.indices.mapping.GetMapping;
-import io.searchbox.indices.mapping.PutMapping;
-import io.searchbox.indices.settings.UpdateSettings;
 
 import static com.ericsson.godzilla.cassandra.index.EsSecondaryIndex.DEBUG_SHOW_VALUES;
 import static io.searchbox.params.Parameters.EXPLAIN;
 import static io.searchbox.params.Parameters.RETRY_ON_CONFLICT;
 import static org.json.simple.JSONValue.escape;
 
-/**
- * ES client based on Jest
- */
+/** ES client based on Jest */
 public class ElasticIndex implements IndexInterface {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(ElasticIndex.class);
@@ -110,21 +82,27 @@ public class ElasticIndex implements IndexInterface {
   private static final String ES_CREDENTIALS = "ESCREDENTIALS";
 
   // Can be useful to restart a Cassandra node with bad JSON
-  private static final boolean SKIP_BAD_JSON = Boolean.getBoolean(IndexConfig.ES_CONFIG_PREFIX + "skip-bad-json");
-  private static final boolean ENABLE_INDEXATION_DATE = !Boolean.getBoolean(IndexConfig.ES_CONFIG_PREFIX + "disable-index-date");
-  private static final long DISCOVERY_FREQ = Long.getLong(IndexConfig.ES_CONFIG_PREFIX + "discovery-frequency", 5);
+  private static final boolean SKIP_BAD_JSON =
+      Boolean.getBoolean(IndexConfig.ES_CONFIG_PREFIX + "skip-bad-json");
+  private static final boolean ENABLE_INDEXATION_DATE =
+      !Boolean.getBoolean(IndexConfig.ES_CONFIG_PREFIX + "disable-index-date");
+  private static final long DISCOVERY_FREQ =
+      Long.getLong(IndexConfig.ES_CONFIG_PREFIX + "discovery-frequency", 5);
 
   // Special fields
   private static final String TTL_FIELD = "_cassandraTtl";
   private static final String INDEXATION_DATE = "IndexationDate";
 
   // Wrapped queries
-  private static final String QUERY_WRAPPER_WITH_SIZE = "{\"size\":%d,\"query\":{\"query_string\":{\"query\":\"%s\"}}}";
+  private static final String QUERY_WRAPPER_WITH_SIZE =
+      "{\"size\":%d,\"query\":{\"query_string\":{\"query\":\"%s\"}}}";
   private static final String QUERY_WRAPPER = "{\"query\":%s}";
-  private static final String QUERY_WRAPPER_WITH_QUOTES = "{\"query\":{\"query_string\":{\"query\":\"%s\"}}}";
+  private static final String QUERY_WRAPPER_WITH_QUOTES =
+      "{\"query\":{\"query_string\":{\"query\":\"%s\"}}}";
   static final String DOC_AS_UPSERT = "{\"doc\":%s,\"doc_as_upsert\":true}";
   private static final String MATCH_ALL = "*";
-  private static final String MATCH_LTE = "{\"conflicts\":\"proceed\",\"query\":{\"range\":{\"" + TTL_FIELD + "\":{\"lte\":%d}}}}";
+  private static final String MATCH_LTE =
+      "{\"conflicts\":\"proceed\",\"query\":{\"range\":{\"" + TTL_FIELD + "\":{\"lte\":%d}}}}";
   private static final String JSON_PREFIX = "{";
 
   private static EsJmxBridge jmxMon;
@@ -183,14 +161,18 @@ public class ElasticIndex implements IndexInterface {
   private Set<String> jsonSerializedFields;
   private int maxResults;
   private boolean isValidateQuery;
-  private boolean isDetectedGeo;  // not work now
+  private boolean isDetectedGeo; // not work now
   private boolean isAsyncWrite;
   private boolean insertOnly;
   private int httpPort;
 
-
-  ElasticIndex(@Nonnull IndexConfig indexConfig, @Nonnull String indexName, @Nonnull String tableName,
-               @Nonnull List<String> partitionKeysNames, @Nonnull List<String> clusteringColumnsNames) throws ConfigurationException {
+  ElasticIndex(
+      @Nonnull IndexConfig indexConfig,
+      @Nonnull String indexName,
+      @Nonnull String tableName,
+      @Nonnull List<String> partitionKeysNames,
+      @Nonnull List<String> clusteringColumnsNames)
+      throws ConfigurationException {
     this.indexConfig = indexConfig;
     this.partitionKeysNames = partitionKeysNames;
     this.clusteringColumnsNames = clusteringColumnsNames;
@@ -208,22 +190,34 @@ public class ElasticIndex implements IndexInterface {
         defaultSchemeForDiscoveredNodes = "https";
       }
       host = host.startsWith("http") ? host : "http://" + host;
-      host = host.substring("http://".length()).contains(":") ? host : host + ":" + httpPort; // also works for https://
+      host =
+          host.substring("http://".length()).contains(":")
+              ? host
+              : host + ":" + httpPort; // also works for https://
       esUrls.add(host);
     }
 
-    int timeout = (int) Math.max(DatabaseDescriptor.getWriteRpcTimeout(), DatabaseDescriptor.getReadRpcTimeout());
-    int maxCon = DatabaseDescriptor.getConcurrentWriters() + DatabaseDescriptor.getConcurrentReaders();
+    int timeout =
+        (int)
+            Math.max(
+                DatabaseDescriptor.getWriteRpcTimeout(), DatabaseDescriptor.getReadRpcTimeout());
+    int maxCon =
+        DatabaseDescriptor.getConcurrentWriters() + DatabaseDescriptor.getConcurrentReaders();
 
-    LOGGER.info("Request timeout: {}ms, max connections: {}, discovery: {}m", timeout, maxCon, DISCOVERY_FREQ);
+    LOGGER.info(
+        "Request timeout: {}ms, max connections: {}, discovery: {}m",
+        timeout,
+        maxCon,
+        DISCOVERY_FREQ);
 
-    HttpClientConfig.Builder httpConfigBuilder = new HttpClientConfig.Builder(esUrls)
-        .multiThreaded(true)
-        .discoveryEnabled(true)
-        .discoveryFrequency(DISCOVERY_FREQ, TimeUnit.MINUTES)
-        .defaultMaxTotalConnectionPerRoute(indexConfig.getMaxTotalConnectionPerRoute())
-        .maxTotalConnection(maxCon)
-        .readTimeout(timeout); // ms
+    HttpClientConfig.Builder httpConfigBuilder =
+        new HttpClientConfig.Builder(esUrls)
+            .multiThreaded(true)
+            .discoveryEnabled(true)
+            .discoveryFrequency(DISCOVERY_FREQ, TimeUnit.MINUTES)
+            .defaultMaxTotalConnectionPerRoute(indexConfig.getMaxTotalConnectionPerRoute())
+            .maxTotalConnection(maxCon)
+            .readTimeout(timeout); // ms
 
     if (esUserName != null) {
       httpConfigBuilder.defaultCredentials(esUserName, esPassword);
@@ -233,8 +227,10 @@ public class ElasticIndex implements IndexInterface {
       try {
         TrustStrategy trustAll = (x509Certificates, authenticationType) -> true;
         SSLContext sslContext = new SSLContextBuilder().loadTrustMaterial(null, trustAll).build();
-        SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(sslContext, NoopHostnameVerifier.INSTANCE);
-        SchemeIOSessionStrategy httpsIOSessionStrategy = new SSLIOSessionStrategy(sslContext, NoopHostnameVerifier.INSTANCE);
+        SSLConnectionSocketFactory sslSocketFactory =
+            new SSLConnectionSocketFactory(sslContext, NoopHostnameVerifier.INSTANCE);
+        SchemeIOSessionStrategy httpsIOSessionStrategy =
+            new SSLIOSessionStrategy(sslContext, NoopHostnameVerifier.INSTANCE);
 
         httpConfigBuilder
             .defaultSchemeForDiscoveredNodes(defaultSchemeForDiscoveredNodes)
@@ -268,8 +264,13 @@ public class ElasticIndex implements IndexInterface {
       Class<?> clazz = Class.forName(className);
       Constructor<?> ctor = clazz.getConstructor(getClass(), IndexConfig.class, String.class);
       result = (IndexManager) ctor.newInstance(this, indexConfig, indexName);
-    } catch (ClassNotFoundException | NoSuchMethodException | SecurityException | InstantiationException | IllegalAccessException
-        | IllegalArgumentException | InvocationTargetException e) {
+    } catch (ClassNotFoundException
+        | NoSuchMethodException
+        | SecurityException
+        | InstantiationException
+        | IllegalAccessException
+        | IllegalArgumentException
+        | InvocationTargetException e) {
       String msg = "Index management " + className + " initialization failed";
       LOGGER.error(msg, e);
       throw new ConfigurationException(msg, e);
@@ -292,15 +293,21 @@ public class ElasticIndex implements IndexInterface {
       }
     }
 
-    LOGGER.info("ElasticIndex '{}' type '{}' initialization", indexManager.getAliasName(), typeName);
+    LOGGER.info(
+        "ElasticIndex '{}' type '{}' initialization", indexManager.getAliasName(), typeName);
 
     // We now wait for the yellow (or green) status
-    JestResult res = execute(new Health.Builder().waitForStatus(Health.Status.YELLOW).build()).waitForSuccess();
+    JestResult res =
+        execute(new Health.Builder().waitForStatus(Health.Status.YELLOW).build()).waitForSuccess();
     LOGGER.debug("Got cluster status: {}", res.getJsonString());
 
     setupIndex(indexManager.getCurrentName()); // Will create the ES index if needed
 
-    LOGGER.debug("ElasticIndex '{}/{}' initialized, pipeline:{}", indexManager.getAliasName(), indexManager.getCurrentName(), usePipeline);
+    LOGGER.debug(
+        "ElasticIndex '{}/{}' initialized, pipeline:{}",
+        indexManager.getAliasName(),
+        indexManager.getCurrentName(),
+        usePipeline);
   }
 
   /**
@@ -311,17 +318,25 @@ public class ElasticIndex implements IndexInterface {
    */
   void setupIndex(String indexName) throws ConfigurationException {
     JsonObject indexProperties = indexConfig.getProperties();
-    LOGGER.debug("Configuring {}/{} with settings:{}", indexManager.getAliasName(), indexName, indexProperties);
+    LOGGER.debug(
+        "Configuring {}/{} with settings:{}",
+        indexManager.getAliasName(),
+        indexName,
+        indexProperties);
 
     indexProperties = JsonUtils.filterKeys(indexProperties, IndexConfig.KNOWN_LEGACY_SETTINGS);
     indexProperties = JsonUtils.filterKeys(indexProperties, IndexConfig.SETTINGS_TO_SKIP);
-    indexProperties.entrySet().removeIf(elem -> elem.getKey().endsWith(IndexConfig.ES_UNICAST_HOSTS));
+    indexProperties
+        .entrySet()
+        .removeIf(elem -> elem.getKey().endsWith(IndexConfig.ES_UNICAST_HOSTS));
 
-    if (indexProperties.get(IndexConfig.ES_TRANSLOG) == null) { // https://intranet.godzilla.com/pages/viewpage.action?pageId=63998861
+    if (indexProperties.get(IndexConfig.ES_TRANSLOG)
+        == null) { // https://intranet.godzilla.com/pages/viewpage.action?pageId=63998861
       indexProperties.addProperty(IndexConfig.ES_TRANSLOG, IndexConfig.ES_TRANSLOG_ASYNC);
     }
 
-    boolean indexExists = execute(new IndicesExists.Builder(indexName).build()).waitForResult().isSucceeded();
+    boolean indexExists =
+        execute(new IndicesExists.Builder(indexName).build()).waitForResult().isSucceeded();
     if (indexExists) {
       LOGGER.warn("Index '{}' already exists, updating.", indexName);
       setupTypeMapping(indexName);
@@ -332,13 +347,16 @@ public class ElasticIndex implements IndexInterface {
         return;
       }
 
-      JsonObject updatableProperties = JsonUtils.filter(indexProperties, IndexConfig.UPDATABLE_SETTINGS::contains);
+      JsonObject updatableProperties =
+          JsonUtils.filter(indexProperties, IndexConfig.UPDATABLE_SETTINGS::contains);
 
       if (updatableProperties.size() == 0) {
         LOGGER.debug("No settings to update");
       } else {
         LOGGER.info("Applying updatable settings from cfg {}", updatableProperties);
-        JestResult res = execute(new UpdateSettings.Builder(updatableProperties).addIndex(indexName).build()).waitForSuccess();
+        JestResult res =
+            execute(new UpdateSettings.Builder(updatableProperties).addIndex(indexName).build())
+                .waitForSuccess();
         LOGGER.info("Index settings update result is: {}", res.isSucceeded());
       }
     } else {
@@ -359,9 +377,12 @@ public class ElasticIndex implements IndexInterface {
         newIndex.set(true); // automatic rebuild support
       } else {
         if (execute(new IndicesExists.Builder(indexName).build()).waitForResult().isSucceeded()) {
-          LOGGER.warn("Creation of index '{}' failed, but it exists now, it was created and configured by another node, proceeding...", indexName);
+          LOGGER.warn(
+              "Creation of index '{}' failed, but it exists now, it was created and configured by another node, proceeding...",
+              indexName);
         } else {
-          LOGGER.error("Failed to create the index '{}' {}", indexName, createIndexResult.getJsonString());
+          LOGGER.error(
+              "Failed to create the index '{}' {}", indexName, createIndexResult.getJsonString());
           throw new ConfigurationException(createIndexResult.getErrorMessage());
         }
       }
@@ -369,25 +390,47 @@ public class ElasticIndex implements IndexInterface {
   }
 
   /**
-   * Create pipelines<br> Instead mapping transform we can use pipeline:
+   * Create pipelines<br>
+   * Instead mapping transform we can use pipeline:
    * https://www.elastic.co/guide/en/elasticsearch/reference/5.0/breaking_50_mapping_changes.html#_source_transform_removed
    * We can define a pipeline for every type, and when we make insert we will the pipeline if the
    * pipeline is defined for this type
    */
   private void setupPipelines() {
-    indexConfig.getPipelines().stream().filter(StringUtils::isNotBlank) // Check null or empty
-        .filter(type -> StringUtils.isNotBlank(indexConfig.getPipeline(type))) // Check pipeline definition exists
-        .forEach(type -> {
-          execute(new UpdatePipeline.Builder(type, indexConfig.getPipeline(type)).build()).waitForSuccess();
-          LOGGER.debug("Pipeline created for '{}'", type);
-        });
+    indexConfig.getPipelines().stream()
+        .filter(StringUtils::isNotBlank) // Check null or empty
+        .filter(
+            type ->
+                StringUtils.isNotBlank(
+                    indexConfig.getPipeline(type))) // Check pipeline definition exists
+        .forEach(
+            type -> {
+              execute(new UpdatePipeline.Builder(type, indexConfig.getPipeline(type)).build())
+                  .waitForSuccess();
+              LOGGER.debug("Pipeline created for '{}'", type);
+            });
   }
 
-  /**
-   * Update the type mapping of an existing index
-   */
+  /** Update the type mapping of an existing index */
   private void setupTypeMapping(String indexName) throws ConfigurationException {
     String mapping = indexConfig.getTypeMapping(typeName);
+
+    if (isDetectedGeo && StringUtils.isNotBlank(mapping)) {
+      Gson gson = new Gson();
+      JsonElement mapObj = gson.toJsonTree(gson.fromJson(mapping, Object.class));
+      JsonElement typeObj = mapObj.getAsJsonObject().get(typeName);
+      JsonElement properties = typeObj.getAsJsonObject().get("properties");
+      if (properties.getAsJsonObject().has("latitude")
+          && jsonSchemaFields.contains("latitude")
+          && properties.getAsJsonObject().has("longitude")
+          && jsonSchemaFields.contains("longitude")) {
+        JsonObject job = new JsonObject();
+        job.addProperty("type", "geo_point");
+        properties.getAsJsonObject().add("location", job);
+      }
+
+      mapping = mapObj.toString();
+    }
 
     if (StringUtils.isNotBlank(mapping)) {
       LOGGER.debug("Updating type mapping for '{}' to:\n\t{}", typeName, mapping);
@@ -403,13 +446,18 @@ public class ElasticIndex implements IndexInterface {
 
   @Override
   public SearchResult putMapping(String index, String source) {
-    JestResult result = execute(new PutMapping.Builder(index, typeName, source).build()).waitForResult();
+    JestResult result =
+        execute(new PutMapping.Builder(index, typeName, source).build()).waitForResult();
     return new SearchResult(new ArrayList<>(), result.getJsonObject());
   }
 
   @Override
-  public void index(@Nonnull List<Pair<String, String>> partitionKeys, @Nonnull List<CellElement> elements, long expirationTime,
-                    boolean isInsert) throws IOException {
+  public void index(
+      @Nonnull List<Pair<String, String>> partitionKeys,
+      @Nonnull List<CellElement> elements,
+      long expirationTime,
+      boolean isInsert)
+      throws IOException {
     if (isConcurrentLock) {
       // lock on intern representation of type+PK, for example: "Interaction[(Id,0001HZO1Qq0haiGs)]"
       // This prevents concurrent upserts on the same doc from the same node
@@ -421,7 +469,11 @@ public class ElasticIndex implements IndexInterface {
     }
   }
 
-  private void indexInternal(List<Pair<String, String>> partitionKeys, List<CellElement> elements, long expirationTime, boolean isInsert)
+  private void indexInternal(
+      List<Pair<String, String>> partitionKeys,
+      List<CellElement> elements,
+      long expirationTime,
+      boolean isInsert)
       throws IOException {
 
     Map<String, List<CellElement>> groupedMap = group(partitionKeys, elements);
@@ -431,10 +483,14 @@ public class ElasticIndex implements IndexInterface {
     }
   }
 
-  /**
-   * update cassandra partition and update elasticsearch
-   */
-  private void update(List<Pair<String, String>> partitionKeys, String docId, List<CellElement> elements, long expirationTime, boolean isInsert) throws IOException {
+  /** update cassandra partition and update elasticsearch */
+  private void update(
+      List<Pair<String, String>> partitionKeys,
+      String docId,
+      List<CellElement> elements,
+      long expirationTime,
+      boolean isInsert)
+      throws IOException {
     StringWriter stringWriter = new StringWriter();
     try (JsonGenerator builder = jsonFactory.createJsonGenerator(stringWriter)) {
       builder.writeStartObject();
@@ -459,7 +515,9 @@ public class ElasticIndex implements IndexInterface {
           if (collections == null) {
             collections = new HashMap<>();
           }
-          collections.computeIfAbsent(element, k -> new HashMap<>()).put(element.collectionValue.name, element.collectionValue.value);
+          collections
+              .computeIfAbsent(element, k -> new HashMap<>())
+              .put(element.collectionValue.name, element.collectionValue.value);
         } else if (element.value != null) {
           try {
             if (matchSchemaElement) {
@@ -533,9 +591,40 @@ public class ElasticIndex implements IndexInterface {
         }
       }
 
+      if (isDetectedGeo) {
+        String latitude = null;
+        String longitude = null;
+        for (CellElement element : elements) {
+          if (!element.isCollection()) {
+            if (StringUtils.equalsIgnoreCase(element.name, "latitude")) {
+              latitude = element.value;
+              continue;
+            }
+            if (StringUtils.equalsIgnoreCase(element.name, "longitude")) {
+              longitude = element.value;
+            }
+          }
+        }
+        if (latitude != null && longitude != null) {
+          builder.writeObjectFieldStart("location");
+          builder.writeFieldName("lat");
+          builder.writeRawValue(latitude);
+          builder.writeFieldName("lon");
+          builder.writeRawValue(longitude);
+          builder.writeEndObject();
+
+          if (DEBUG_SHOW_VALUES) {
+            LOGGER.debug("mapping geo position with lat {} and lon {}", latitude, longitude);
+          }
+        }
+      }
+
       if (!ignoreProperties.isEmpty()) {
         if (DEBUG_SHOW_VALUES) {
-          LOGGER.debug("\u001B[44m{}\u001B[0m indexing skip serialized fields:\u001B[33m{}\u001B[0m", indexManager.getCurrentName(), ignoreProperties);
+          LOGGER.debug(
+              "\u001B[44m{}\u001B[0m indexing skip serialized fields:\u001B[33m{}\u001B[0m",
+              indexManager.getCurrentName(),
+              ignoreProperties);
         }
       }
 
@@ -553,13 +642,19 @@ public class ElasticIndex implements IndexInterface {
 
       if (DEBUG_SHOW_VALUES) {
         String operation = (insertOnly || usePipeline) ? "insert" : "upsert";
-        LOGGER.debug("Document {} index {} {} with content \u001B[33m{}\u001B[0m", typeName, operation, docId, jsonDoc);
+        LOGGER.debug(
+            "Document {} index {} {} with content \u001B[33m{}\u001B[0m",
+            typeName,
+            operation,
+            docId,
+            jsonDoc);
       }
 
       String currentName = indexManager.getCurrentName();
       ResponseHandler<DocumentResult> handler;
       if (insertOnly || usePipeline) {
-        Index.Builder indexRequest = new Index.Builder(jsonDoc).index(currentName).type(typeName).id(docId);
+        Index.Builder indexRequest =
+            new Index.Builder(jsonDoc).index(currentName).type(typeName).id(docId);
 
         if (usePipeline) { // https://www.elastic.co/guide/en/elasticsearch/reference/5.5/ingest.html
           indexRequest.setParameter(ES_PIPELINE, typeName);
@@ -568,10 +663,11 @@ public class ElasticIndex implements IndexInterface {
 
       } else {
         // Pipelines can only be used with index or bulk
-        Update.Builder update = new Update.Builder(String.format(DOC_AS_UPSERT, jsonDoc))
-            .index(currentName)
-            .type(typeName)
-            .id(docId);
+        Update.Builder update =
+            new Update.Builder(String.format(DOC_AS_UPSERT, jsonDoc))
+                .index(currentName)
+                .type(typeName)
+                .id(docId);
 
         if (indexConfig.getRetryOnConflict() > -1) {
           update.setParameter(RETRY_ON_CONFLICT, indexConfig.getRetryOnConflict());
@@ -590,10 +686,11 @@ public class ElasticIndex implements IndexInterface {
    * Group all CellElement according to their clustering keys
    *
    * @param partitionKeys not null
-   * @param elements      not null
+   * @param elements not null
    * @return a grouped map
    */
-  private Map<String, List<CellElement>> group(List<Pair<String, String>> partitionKeys, List<CellElement> elements) {
+  private Map<String, List<CellElement>> group(
+      List<Pair<String, String>> partitionKeys, List<CellElement> elements) {
     Map<String, List<CellElement>> sortedCells = new HashMap<>();
 
     for (CellElement element : elements) {
@@ -608,15 +705,18 @@ public class ElasticIndex implements IndexInterface {
   public void delete(@Nonnull List<Pair<String, String>> partitionKeys) {
     String docId = CStarUtils.toEsId(partitionKeys, null);
     String currentName = indexManager.getCurrentName();
-    ResponseHandler<DocumentResult> handler = execute(new Delete.Builder(docId).index(currentName).type(typeName).build());
+    ResponseHandler<DocumentResult> handler =
+        execute(new Delete.Builder(docId).index(currentName).type(typeName).build());
     if (!isAsyncWrite) {
-      handler.waitForStatus(200, 404, 204); // Blocks until response. Does not ensure result is a success.
+      handler.waitForStatus(
+          200, 404, 204); // Blocks until response. Does not ensure result is a success.
     }
   }
 
   @Override
   public Object flush() {
-    return execute(new Flush.Builder().addIndex(indexManager.getCurrentName()).force(true).build()).waitForSuccess();
+    return execute(new Flush.Builder().addIndex(indexManager.getCurrentName()).force(true).build())
+        .waitForSuccess();
   }
 
   @Override
@@ -629,7 +729,8 @@ public class ElasticIndex implements IndexInterface {
     }
     LOGGER.trace("Index {} search with query {}", typeName, queryString);
 
-    Search.Builder builder = new Search.Builder(queryString).addIndex(indexManager.getAliasName()).addType(typeName);
+    Search.Builder builder =
+        new Search.Builder(queryString).addIndex(indexManager.getAliasName()).addType(typeName);
 
     io.searchbox.core.SearchResult searchResponse;
     try {
@@ -642,7 +743,10 @@ public class ElasticIndex implements IndexInterface {
 
     LOGGER.trace("Index {} search result: {}", typeName, searchResponse);
 
-    int totalHits = Math.min(searchResponse.getTotal() == null ? 0 : searchResponse.getTotal(), maxResults); // D38117
+    int totalHits =
+        Math.min(
+            searchResponse.getTotal() == null ? 0 : searchResponse.getTotal(),
+            maxResults); // D38117
     final List<SearchResultRow> idList = new ArrayList<>(totalHits);
 
     JsonElement hits = JsonUtils.getJsonObject(searchResponse, ES_HITS).get(ES_HITS);
@@ -659,28 +763,32 @@ public class ElasticIndex implements IndexInterface {
 
       int pkSize = primaryKeys.size();
 
-      hits.getAsJsonArray().forEach(result -> {
-        String[] primaryKey = new String[pkSize];
+      hits.getAsJsonArray()
+          .forEach(
+              result -> {
+                String[] primaryKey = new String[pkSize];
 
-        int keyNb = 0;
+                int keyNb = 0;
 
-        for (String keyName : primaryKeys) {
-          String value = JsonUtils.getString(result, ES_SOURCE, keyName);
+                for (String keyName : primaryKeys) {
+                  String value = JsonUtils.getString(result, ES_SOURCE, keyName);
 
-          if (value == null) {
-            LOGGER.warn("Missing pk {} from ES results, skipping hit:{}", keyName, JsonUtils.getString(result, ES_ID));
-            continue;
-          } else {
-            primaryKey[keyNb] = value;
-          }
-          keyNb++;
-        }
+                  if (value == null) {
+                    LOGGER.warn(
+                        "Missing pk {} from ES results, skipping hit:{}",
+                        keyName,
+                        JsonUtils.getString(result, ES_ID));
+                    continue;
+                  } else {
+                    primaryKey[keyNb] = value;
+                  }
+                  keyNb++;
+                }
 
-        if (keyNb == pkSize) { // Will only be false if we skipped a hit, see above warning
-          idList.add(new SearchResultRow(primaryKey, result.getAsJsonObject()));
-        }
-
-      });
+                if (keyNb == pkSize) { // Will only be false if we skipped a hit, see above warning
+                  idList.add(new SearchResultRow(primaryKey, result.getAsJsonObject()));
+                }
+              });
     }
 
     // Remove the content of {"hits":{"hits": (big values) } }
@@ -692,7 +800,10 @@ public class ElasticIndex implements IndexInterface {
     try {
       return mapper.readTree(query).get("query").toString();
     } catch (Exception e) {
-      LOGGER.trace("Could not extract query node from '{}' for Index {}", query, indexManager.getAliasName());
+      LOGGER.trace(
+          "Could not extract query node from '{}' for Index {}",
+          query,
+          indexManager.getAliasName());
     }
     return query;
   }
@@ -708,7 +819,7 @@ public class ElasticIndex implements IndexInterface {
 
     // Ignore index management queries like #update# .... #
     if (query.startsWith("#")) {
-      if (query.endsWith("#")) { //WCC-886
+      if (query.endsWith("#")) { // WCC-886
         return;
       } else {
         int optionEnd = query.indexOf("#", 1);
@@ -770,7 +881,10 @@ public class ElasticIndex implements IndexInterface {
   public Object drop() {
     if (indexConfig.isPerIndexType()) {
       String indexName = indexManager.getCurrentName();
-      LOGGER.warn("Index {}/{} is being dropped, stopping purge task, deleting ES index", indexName, typeName);
+      LOGGER.warn(
+          "Index {}/{} is being dropped, stopping purge task, deleting ES index",
+          indexName,
+          typeName);
       indexManager.stop();
 
       JestResult res = execute(new Delete.Builder("").index(indexName).build()).waitForResult();
@@ -784,7 +898,9 @@ public class ElasticIndex implements IndexInterface {
   public Object truncate() {
     String aliasName = indexManager.getAliasName();
     LOGGER.warn("Index {}/{} is being truncated, deleting documents", aliasName, typeName);
-    JestResult res = execute(new Delete.Builder(MATCH_ALL).index(aliasName).type(typeName).build()).waitForResult();
+    JestResult res =
+        execute(new Delete.Builder(MATCH_ALL).index(aliasName).type(typeName).build())
+            .waitForResult();
     return res.isSucceeded();
   }
 
@@ -793,12 +909,20 @@ public class ElasticIndex implements IndexInterface {
     String aliasName = indexManager.getAliasName();
     long ttl = FBUtilities.nowInSeconds() + ttlShift;
 
-    DeleteByQuery deleteQuery = new DeleteByQuery.Builder(String.format(MATCH_LTE, ttl)).addIndex(aliasName).addType(typeName).build();
+    DeleteByQuery deleteQuery =
+        new DeleteByQuery.Builder(String.format(MATCH_LTE, ttl))
+            .addIndex(aliasName)
+            .addType(typeName)
+            .build();
     JestResult res = execute(deleteQuery).waitForSuccess();
 
     Long deleted = JsonUtils.getLong(res.getJsonObject(), "deleted");
     if (deleted != null && deleted > 0) {
-      LOGGER.debug("Index {} deleted {} documents where _cassandraTtl < {}", indexManager.getAliasName(), deleted, ttl);
+      LOGGER.debug(
+          "Index {} deleted {} documents where _cassandraTtl < {}",
+          indexManager.getAliasName(),
+          deleted,
+          ttl);
     }
   }
 
@@ -806,19 +930,24 @@ public class ElasticIndex implements IndexInterface {
   public void purgeEmptyIndexes() {
     String aliasName = indexManager.getAliasName();
     LOGGER.debug("Start segmented index cleanup for {}", aliasName);
-    JestResult aliasesResponses = execute(new GetAliases.Builder().addIndex(aliasName).build()).waitForResult();
+    JestResult aliasesResponses =
+        execute(new GetAliases.Builder().addIndex(aliasName).build()).waitForResult();
 
     if (aliasesResponses.isSucceeded()) {
-      JsonUtils.getJsonObject(aliasesResponses, aliasName, "aliases").entrySet().forEach(alias -> {
-        String indexToDelete = alias.getKey();
-        CountResult count = execute(new Count.Builder().addIndex(indexToDelete).build()).waitForResult();
+      JsonUtils.getJsonObject(aliasesResponses, aliasName, "aliases")
+          .entrySet()
+          .forEach(
+              alias -> {
+                String indexToDelete = alias.getKey();
+                CountResult count =
+                    execute(new Count.Builder().addIndex(indexToDelete).build()).waitForResult();
 
-        if (count.isSucceeded() && count.getCount().intValue() == 0) {
-          dropIndex(indexToDelete);
-        } else {
-          LOGGER.debug("Index {} is not empty", indexToDelete);
-        }
-      });
+                if (count.isSucceeded() && count.getCount().intValue() == 0) {
+                  dropIndex(indexToDelete);
+                } else {
+                  LOGGER.debug("Index {} is not empty", indexToDelete);
+                }
+              });
     }
   }
 
@@ -842,7 +971,9 @@ public class ElasticIndex implements IndexInterface {
   @Override
   public List<String> getIndexNames() {
     List<String> result = new LinkedList<>();
-    JestResult res = execute(new GetAliases.Builder().addIndex(indexManager.getAliasName()).build()).waitForResult();
+    JestResult res =
+        execute(new GetAliases.Builder().addIndex(indexManager.getAliasName()).build())
+            .waitForResult();
     Set<Map.Entry<String, JsonElement>> set = res.getJsonObject().entrySet();
     for (Map.Entry<String, JsonElement> entry : set) {
       result.add(entry.getKey());
@@ -853,7 +984,8 @@ public class ElasticIndex implements IndexInterface {
   @Override
   public void dropIndex(String indexName) {
     LOGGER.info("Deleting index {}", indexName);
-    boolean success = execute(new DeleteIndex.Builder(indexName).build()).waitForResult().isSucceeded();
+    boolean success =
+        execute(new DeleteIndex.Builder(indexName).build()).waitForResult().isSucceeded();
     LOGGER.info("Index {} deletion {}", indexName, success ? "successful" : "failed");
   }
 
@@ -863,7 +995,6 @@ public class ElasticIndex implements IndexInterface {
     JestResult addAliasResult = execute(new ModifyAliases.Builder(aliases).build()).waitForResult();
     LOGGER.warn("Index alias creation result is: {}", addAliasResult.isSucceeded());
   }
-
 
   private String json(RowFilter.Expression expression) {
     ByteBuffer bb = null;
@@ -884,5 +1015,4 @@ public class ElasticIndex implements IndexInterface {
   private boolean supports(ColumnDefinition definition, Operator operator) {
     return operator == Operator.EQ && !jsonSchemaFields.contains(definition.name.toString());
   }
-
 }

@@ -7,12 +7,7 @@
 package com.ericsson.godzilla.cassandra.index;
 
 import com.ericsson.godzilla.cassandra.index.requests.EsRequestExecutionException;
-
-import org.apache.cassandra.cql3.BatchQueryOptions;
-import org.apache.cassandra.cql3.CQLStatement;
-import org.apache.cassandra.cql3.QueryHandler;
-import org.apache.cassandra.cql3.QueryOptions;
-import org.apache.cassandra.cql3.QueryProcessor;
+import org.apache.cassandra.cql3.*;
 import org.apache.cassandra.cql3.statements.BatchStatement;
 import org.apache.cassandra.cql3.statements.IndexTarget;
 import org.apache.cassandra.cql3.statements.ParsedStatement;
@@ -52,9 +47,7 @@ import java.util.stream.Collectors;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.apache.cassandra.cql3.statements.RequestValidations.checkNotNull;
 
-/**
- * Payload is ignore here because we want to use elasticsearch expression
- */
+/** Payload is ignore here because we want to use elasticsearch expression */
 public class EsQueryHandler implements QueryHandler {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(EsQueryHandler.class);
@@ -63,7 +56,9 @@ public class EsQueryHandler implements QueryHandler {
 
   static {
     try {
-      processResults = SelectStatement.class.getDeclaredMethod("processResults", PartitionIterator.class, QueryOptions.class, int.class, int.class);
+      processResults =
+          SelectStatement.class.getDeclaredMethod(
+              "processResults", PartitionIterator.class, QueryOptions.class, int.class, int.class);
       processResults.setAccessible(true);
     } catch (NoSuchMethodException e) {
       LOGGER.error("cassandra-all does not exists or with compatibility version");
@@ -71,7 +66,9 @@ public class EsQueryHandler implements QueryHandler {
   }
 
   public static void activate() {
-    LOGGER.debug("Current query handler is \u001B[34m{}\u001B[0m", ClientState.getCQLQueryHandler().getClass().getSimpleName());
+    LOGGER.debug(
+        "Current query handler is \u001B[34m{}\u001B[0m",
+        ClientState.getCQLQueryHandler().getClass().getSimpleName());
     if (!(ClientState.getCQLQueryHandler() instanceof EsQueryHandler)) {
       try {
         Field field = ClientState.class.getDeclaredField("cqlQueryHandler");
@@ -87,7 +84,13 @@ public class EsQueryHandler implements QueryHandler {
   }
 
   @Override
-  public ResultMessage process(String query, QueryState state, QueryOptions options, Map<String, ByteBuffer> customPayload, long queryStartNanoTime) throws RequestExecutionException, RequestValidationException {
+  public ResultMessage process(
+      String query,
+      QueryState state,
+      QueryOptions options,
+      Map<String, ByteBuffer> customPayload,
+      long queryStartNanoTime)
+      throws RequestExecutionException, RequestValidationException {
     ParsedStatement.Prepared p = QueryProcessor.getStatement(query, state.getClientState());
     options.prepare(p.boundNames);
     CQLStatement prepared = p.statement;
@@ -101,7 +104,9 @@ public class EsQueryHandler implements QueryHandler {
   }
 
   @Override
-  public ResultMessage.Prepared prepare(String query, QueryState state, Map<String, ByteBuffer> customPayload) throws RequestValidationException {
+  public ResultMessage.Prepared prepare(
+      String query, QueryState state, Map<String, ByteBuffer> customPayload)
+      throws RequestValidationException {
     return QueryProcessor.instance.prepare(query, state);
   }
 
@@ -116,17 +121,32 @@ public class EsQueryHandler implements QueryHandler {
   }
 
   @Override
-  public ResultMessage processPrepared(CQLStatement statement, QueryState state, QueryOptions options, Map<String, ByteBuffer> customPayload, long queryStartNanoTime) throws RequestExecutionException, RequestValidationException {
+  public ResultMessage processPrepared(
+      CQLStatement statement,
+      QueryState state,
+      QueryOptions options,
+      Map<String, ByteBuffer> customPayload,
+      long queryStartNanoTime)
+      throws RequestExecutionException, RequestValidationException {
     QueryProcessor.metrics.preparedStatementsExecuted.inc();
     return processStatement(statement, state, options, queryStartNanoTime);
   }
 
   @Override
-  public ResultMessage processBatch(BatchStatement statement, QueryState state, BatchQueryOptions options, Map<String, ByteBuffer> customPayload, long queryStartNanoTime) throws RequestExecutionException, RequestValidationException {
-    return QueryProcessor.instance.processBatch(statement, state, options, customPayload, queryStartNanoTime);
+  public ResultMessage processBatch(
+      BatchStatement statement,
+      QueryState state,
+      BatchQueryOptions options,
+      Map<String, ByteBuffer> customPayload,
+      long queryStartNanoTime)
+      throws RequestExecutionException, RequestValidationException {
+    return QueryProcessor.instance.processBatch(
+        statement, state, options, customPayload, queryStartNanoTime);
   }
 
-  private ResultMessage processStatement(CQLStatement statement, QueryState state, QueryOptions options, long queryStartNanoTime) throws RequestExecutionException {
+  private ResultMessage processStatement(
+      CQLStatement statement, QueryState state, QueryOptions options, long queryStartNanoTime)
+      throws RequestExecutionException {
     LOGGER.trace("Process {} @CL.{}", statement, options.getConsistency());
     ClientState clientState = state.getClientState();
     statement.checkAccess(clientState);
@@ -136,7 +156,9 @@ public class EsQueryHandler implements QueryHandler {
     if (statement instanceof SelectStatement) {
       SelectStatement select = (SelectStatement) statement;
       Map<RowFilter.Expression, EsSecondaryIndex> expressions = elasticExpressions(select, options);
-      LOGGER.debug("Expression query list {}", expressions.values().stream().distinct().collect(Collectors.toList()));
+      LOGGER.debug(
+          "Expression query list {}",
+          expressions.values().stream().distinct().collect(Collectors.toList()));
       if (!expressions.isEmpty()) {
         return executeElasticQuery(select, state, options, expressions, queryStartNanoTime);
       }
@@ -144,20 +166,31 @@ public class EsQueryHandler implements QueryHandler {
     return execute(statement, state, options, queryStartNanoTime);
   }
 
-  private Map<RowFilter.Expression, EsSecondaryIndex> elasticExpressions(SelectStatement select, QueryOptions options) {
+  private Map<RowFilter.Expression, EsSecondaryIndex> elasticExpressions(
+      SelectStatement select, QueryOptions options) {
     Map<RowFilter.Expression, EsSecondaryIndex> map = new LinkedHashMap<>();
     List<RowFilter.Expression> expressions = select.getRowFilter(options).getExpressions();
-    ColumnFamilyStore cfs = Keyspace.open(select.keyspace()).getColumnFamilyStore(select.columnFamily());
-    Set<Index> indexes = cfs.indexManager.listIndexes().stream().filter(e -> e instanceof EsSecondaryIndex).collect(Collectors.toSet());
+    ColumnFamilyStore cfs =
+        Keyspace.open(select.keyspace()).getColumnFamilyStore(select.columnFamily());
+    Set<Index> indexes =
+        cfs.indexManager.listIndexes().stream()
+            .filter(e -> e instanceof EsSecondaryIndex)
+            .collect(Collectors.toSet());
     for (RowFilter.Expression expression : expressions) {
       if (expression instanceof RowFilter.CustomExpression) {
-        String clazz = ((RowFilter.CustomExpression) expression).getTargetIndex().options.get(IndexTarget.CUSTOM_INDEX_OPTION_NAME);
+        String clazz =
+            ((RowFilter.CustomExpression) expression)
+                .getTargetIndex()
+                .options
+                .get(IndexTarget.CUSTOM_INDEX_OPTION_NAME);
         if (clazz.equals(Index.class.getCanonicalName())) {
-          EsSecondaryIndex index = (EsSecondaryIndex) cfs.indexManager.getIndex(((RowFilter.CustomExpression) expression).getTargetIndex());
+          EsSecondaryIndex index =
+              (EsSecondaryIndex)
+                  cfs.indexManager.getIndex(
+                      ((RowFilter.CustomExpression) expression).getTargetIndex());
           map.put(expression, index);
         } else {
-          indexes
-              .stream()
+          indexes.stream()
               .filter(i -> i.supportsExpression(expression.column(), expression.operator()))
               .map(k -> (EsSecondaryIndex) k)
               .forEach(e -> map.put(expression, e));
@@ -167,23 +200,28 @@ public class EsQueryHandler implements QueryHandler {
     return map;
   }
 
-  private ResultMessage execute(CQLStatement statement, QueryState state, QueryOptions options, long queryStartNanoTime) {
+  private ResultMessage execute(
+      CQLStatement statement, QueryState state, QueryOptions options, long queryStartNanoTime) {
     ResultMessage result = statement.execute(state, options, queryStartNanoTime);
     if (result == null) return new ResultMessage.Void();
     else return result;
   }
 
-  private ResultMessage executeElasticQuery(SelectStatement select,
-                                            QueryState state,
-                                            QueryOptions options,
-                                            Map<RowFilter.Expression,
-                                                EsSecondaryIndex> expressions, long queryStartNanoTime) throws RequestExecutionException {
+  private ResultMessage executeElasticQuery(
+      SelectStatement select,
+      QueryState state,
+      QueryOptions options,
+      Map<RowFilter.Expression, EsSecondaryIndex> expressions,
+      long queryStartNanoTime)
+      throws RequestExecutionException {
     if (expressions.size() > 1) {
-      throw new InvalidRequestException("Elasticsearch index only supports one search expression per query.");
+      throw new InvalidRequestException(
+          "Elasticsearch index only supports one search expression per query.");
     }
 
     // Validate expression
-    Map.Entry<RowFilter.Expression, EsSecondaryIndex> entry = expressions.entrySet().stream().findFirst().get();
+    Map.Entry<RowFilter.Expression, EsSecondaryIndex> entry =
+        expressions.entrySet().stream().findFirst().get();
     RowFilter.Expression expression = entry.getKey();
     EsSecondaryIndex index = entry.getValue();
     String queryString = null;
@@ -207,47 +245,11 @@ public class EsQueryHandler implements QueryHandler {
 
     ReadQuery query = select.getQuery(options, now, limit, userPerPartitionLimit, page);
 
-    try (PartitionIterator data = query.execute(consistency, state.getClientState(), queryStartNanoTime)) {
+    try (PartitionIterator data =
+        query.execute(consistency, state.getClientState(), queryStartNanoTime)) {
       return (ResultMessage.Rows) processResults.invoke(select, data, options, now, page);
     } catch (IllegalAccessException | InvocationTargetException e) {
       throw new EsRequestExecutionException(ExceptionCode.INVALID, e.getMessage());
     }
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

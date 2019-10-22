@@ -1,27 +1,24 @@
 /*
-* Copyright Ericsson AB 2019 - All Rights Reserved.
-* The copyright to the computer program(s) herein is the property of Ericsson AB.
-* The programs may be used and/or copied only with written permission from Ericsson AB
-* or in accordance with the terms and conditions stipulated in the agreement/contract under which the program(s) have been supplied.
-*/
+ * Copyright Ericsson AB 2019 - All Rights Reserved.
+ * The copyright to the computer program(s) herein is the property of Ericsson AB.
+ * The programs may be used and/or copied only with written permission from Ericsson AB
+ * or in accordance with the terms and conditions stipulated in the agreement/contract under which the program(s) have been supplied.
+ */
 package com.ericsson.godzilla.cassandra.index.config;
 
+import com.ericsson.godzilla.cassandra.index.requests.ElasticClientFactory;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-
-import com.ericsson.godzilla.cassandra.index.requests.ElasticClientFactory;
-
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.exceptions.ConfigurationException;
 
+import javax.annotation.Nonnull;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.StringTokenizer;
-
-import javax.annotation.Nonnull;
 
 public class IndexConfiguration implements IndexConfig {
   private static final boolean ES_CLASSES_NOT_FOUND;
@@ -57,7 +54,9 @@ public class IndexConfiguration implements IndexConfig {
       }
     }
 
-    types.addAll(getPipelinesFromOptions()); // also we add all pipelines defined as "ES_PIPELINES_PREFIX + typeName"
+    types.addAll(
+        getPipelinesFromOptions()); // also we add all pipelines defined as "ES_PIPELINES_PREFIX +
+                                    // typeName"
     return types;
   }
 
@@ -65,11 +64,14 @@ public class IndexConfiguration implements IndexConfig {
   private Set<String> getPipelinesFromOptions() {
     Set<String> result = new HashSet<>();
 
-    reader.getOptions().forEach((key, value) -> {
-      if (key.startsWith(ES_PIPELINES_PREFIX)) {
-        result.add(key.substring(ES_PIPELINES_PREFIX.length()));
-      }
-    });
+    reader
+        .getOptions()
+        .forEach(
+            (key, value) -> {
+              if (key.startsWith(ES_PIPELINES_PREFIX)) {
+                result.add(key.substring(ES_PIPELINES_PREFIX.length()));
+              }
+            });
     return result;
   }
 
@@ -262,5 +264,4 @@ public class IndexConfiguration implements IndexConfig {
   public int getRetryOnConflict() {
     return reader.getInteger(ES_RETRY_ON_CONFLICT, ES_RETRY_ON_CONFLICT_DEF);
   }
-
 }

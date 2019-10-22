@@ -1,19 +1,20 @@
 /*
-* Copyright Ericsson AB 2019 - All Rights Reserved.
-* The copyright to the computer program(s) herein is the property of Ericsson AB.
-* The programs may be used and/or copied only with written permission from Ericsson AB
-* or in accordance with the terms and conditions stipulated in the agreement/contract under which the program(s) have been supplied.
-*/
+ * Copyright Ericsson AB 2019 - All Rights Reserved.
+ * The copyright to the computer program(s) herein is the property of Ericsson AB.
+ * The programs may be used and/or copied only with written permission from Ericsson AB
+ * or in accordance with the terms and conditions stipulated in the agreement/contract under which the program(s) have been supplied.
+ */
 package com.ericsson.godzilla.cassandra.index.config;
 
 import com.google.common.collect.MapDifference;
 import com.google.common.collect.Maps;
-
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.utils.FBUtilities;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -22,9 +23,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
@@ -40,8 +38,10 @@ public class OptionReader {
   private static final String[] FILES = {"/es-index.properties", "es-index.properties"};
   private static final String[] FOLDERS = {".", "./conf/", "../conf/", "./bin/"};
 
-  private final String dcName = DatabaseDescriptor.getEndpointSnitch().getDatacenter(FBUtilities.getBroadcastAddress());
-  private final String rackName = DatabaseDescriptor.getEndpointSnitch().getRack(FBUtilities.getBroadcastAddress());
+  private final String dcName =
+      DatabaseDescriptor.getEndpointSnitch().getDatacenter(FBUtilities.getBroadcastAddress());
+  private final String rackName =
+      DatabaseDescriptor.getEndpointSnitch().getRack(FBUtilities.getBroadcastAddress());
   private final String indexName;
   private Map<String, String> options = new HashMap<>();
 
@@ -62,7 +62,6 @@ public class OptionReader {
           LOGGER.error("Can't close {}", name, e);
         }
         return foundFile;
-
       }
 
       File file = new File(path + name);
@@ -90,8 +89,12 @@ public class OptionReader {
       return false;
     } else {
       MapDifference<String, String> diff = Maps.difference(this.options, newOptions);
-      LOGGER.warn("Reloaded {} options changed: \n\tadded:{} \n\tremoved:{} \n\tchanged:{}", indexName, diff.entriesOnlyOnRight(),
-          diff.entriesOnlyOnLeft(), diff.entriesDiffering());
+      LOGGER.warn(
+          "Reloaded {} options changed: \n\tadded:{} \n\tremoved:{} \n\tchanged:{}",
+          indexName,
+          diff.entriesOnlyOnRight(),
+          diff.entriesOnlyOnLeft(),
+          diff.entriesDiffering());
       this.options = newOptions;
       return true;
     }
@@ -110,7 +113,8 @@ public class OptionReader {
     try {
       return Integer.parseInt(value);
     } catch (NumberFormatException ex) {
-      LOGGER.warn("{} option {} has invalid value {} using default {}", indexName, key, value, defValue);
+      LOGGER.warn(
+          "{} option {} has invalid value {} using default {}", indexName, key, value, defValue);
       return defValue;
     }
   }
@@ -122,7 +126,8 @@ public class OptionReader {
       return value;
     }
 
-    value = get(dcName + "." + rackName + "." + key); // Try specific dc/rack, keep GWE compatibility
+    value =
+        get(dcName + "." + rackName + "." + key); // Try specific dc/rack, keep GWE compatibility
     if (value != null) {
       return value;
     }
@@ -153,7 +158,10 @@ public class OptionReader {
     }
 
     if (isBlank(value)) {
-      value = options.getOrDefault(key, options.get(key.replace('-', '.'))); // Try hyphen format then try in doted format
+      value =
+          options.getOrDefault(
+              key,
+              options.get(key.replace('-', '.'))); // Try hyphen format then try in doted format
     }
 
     return isBlank(value) ? null : value;
@@ -181,10 +189,14 @@ public class OptionReader {
     }
 
     boolean fromCp = cfgFile.startsWith(CLASSPATH_PREFIX);
-    String filePath = fromCp ? cfgFile.substring(CLASSPATH_PREFIX.length(), cfgFile.length()) : cfgFile;
+    String filePath =
+        fromCp ? cfgFile.substring(CLASSPATH_PREFIX.length(), cfgFile.length()) : cfgFile;
 
     Map<String, String> fileOptions = new HashMap<>();
-    try (InputStream ios = fromCp ? this.getClass().getResourceAsStream(filePath) : new FileInputStream(new File(filePath))) {
+    try (InputStream ios =
+        fromCp
+            ? this.getClass().getResourceAsStream(filePath)
+            : new FileInputStream(new File(filePath))) {
 
       Properties props = new Properties();
       props.load(ios);

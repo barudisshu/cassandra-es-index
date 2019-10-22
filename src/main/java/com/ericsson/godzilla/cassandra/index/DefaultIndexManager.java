@@ -1,26 +1,24 @@
 /*
-* Copyright Ericsson AB 2019 - All Rights Reserved.
-* The copyright to the computer program(s) herein is the property of Ericsson AB.
-* The programs may be used and/or copied only with written permission from Ericsson AB
-* or in accordance with the terms and conditions stipulated in the agreement/contract under which the program(s) have been supplied.
-*/
+ * Copyright Ericsson AB 2019 - All Rights Reserved.
+ * The copyright to the computer program(s) herein is the property of Ericsson AB.
+ * The programs may be used and/or copied only with written permission from Ericsson AB
+ * or in accordance with the terms and conditions stipulated in the agreement/contract under which the program(s) have been supplied.
+ */
 package com.ericsson.godzilla.cassandra.index;
 
 import com.ericsson.godzilla.cassandra.index.config.IndexConfig;
-
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.TimeZone;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 
 import static java.time.ZoneOffset.UTC;
 import static java.util.concurrent.TimeUnit.MINUTES;
@@ -29,53 +27,63 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 /**
  * Manages index creation on top of current date by configured template. Provides data expiration on
  * top of additional field in every document
- **/
+ */
 public class DefaultIndexManager implements IndexManager {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(DefaultIndexManager.class);
 
   public static final String INDEX_POSTFIX = "_index@";
-  private static final long UPDATE_PERIOD = Long.getLong(IndexConfig.ES_CONFIG_PREFIX + "update-period", 60);
-  private static final long TTL_PERIOD = Long.getLong(IndexConfig.ES_CONFIG_PREFIX + "ttl-period", 60);
+  private static final long UPDATE_PERIOD =
+      Long.getLong(IndexConfig.ES_CONFIG_PREFIX + "update-period", 60);
+  private static final long TTL_PERIOD =
+      Long.getLong(IndexConfig.ES_CONFIG_PREFIX + "ttl-period", 60);
 
   // Make sure there is one thread per task
   private final AtomicInteger threadId = new AtomicInteger(0);
   private final ScheduledExecutorService scheduler =
-      Executors.newScheduledThreadPool(3, r -> new Thread(r, "IdxMgr-" + threadId.getAndIncrement()));
+      Executors.newScheduledThreadPool(
+          3, r -> new Thread(r, "IdxMgr-" + threadId.getAndIncrement()));
   private final ElasticIndex index;
   private final IndexConfig indexConfig;
   private final String aliasName; // Never changes
   private String currentName;
 
-  public DefaultIndexManager(@Nonnull ElasticIndex index, @Nonnull IndexConfig indexConfig, @Nonnull String indexName) {
+  public DefaultIndexManager(
+      @Nonnull ElasticIndex index, @Nonnull IndexConfig indexConfig, @Nonnull String indexName) {
     this.index = index;
     this.indexConfig = indexConfig;
 
     // index and alias names must be lowercase
-    aliasName = (indexConfig.isPerIndexType() ? indexName + "_" + index.typeName : indexName).toLowerCase();
+    aliasName =
+        (indexConfig.isPerIndexType() ? indexName + "_" + index.typeName : indexName).toLowerCase();
 
     long purgePeriod = indexConfig.getIndexPurgePeriod();
-    scheduler.scheduleAtFixedRate(new SafeRunnable(index::purgeEmptyIndexes, "purge", LOGGER), purgePeriod, purgePeriod, MINUTES);
+    scheduler.scheduleAtFixedRate(
+        new SafeRunnable(index::purgeEmptyIndexes, "purge", LOGGER),
+        purgePeriod,
+        purgePeriod,
+        MINUTES);
     if (indexConfig.isForceDelete()) {
-      scheduler.scheduleAtFixedRate(new SafeRunnable(index::deleteExpired, "ttl", LOGGER), TTL_PERIOD, TTL_PERIOD, SECONDS);
+      scheduler.scheduleAtFixedRate(
+          new SafeRunnable(index::deleteExpired, "ttl", LOGGER), TTL_PERIOD, TTL_PERIOD, SECONDS);
     }
 
-    scheduler.scheduleAtFixedRate(new SafeRunnable(this::checkForUpdate, "update", LOGGER), UPDATE_PERIOD, UPDATE_PERIOD, SECONDS);
+    scheduler.scheduleAtFixedRate(
+        new SafeRunnable(this::checkForUpdate, "update", LOGGER),
+        UPDATE_PERIOD,
+        UPDATE_PERIOD,
+        SECONDS);
     currentName = buildIndexName();
   }
 
-  /**
-   * @return the constant name of the index
-   */
+  /** @return the constant name of the index */
   @Override
   @Nonnull
   public String getAliasName() {
     return aliasName;
   }
 
-  /**
-   * @return the current name of the latest index
-   */
+  /** @return the current name of the latest index */
   @Override
   @Nonnull
   public String getCurrentName() {
@@ -100,9 +108,11 @@ public class DefaultIndexManager implements IndexManager {
       switch (indexConfig.getIndexSegment()) {
         case CUSTOM:
           if (indexConfig.getIndexSegmentName() == null) {
-            throw new ConfigurationException(indexConfig.getIndexSegment() + " mode can't have a null name");
+            throw new ConfigurationException(
+                indexConfig.getIndexSegment() + " mode can't have a null name");
           } else {
-            indexNameBuilder.append(indexConfig.getIndexSegmentName().toLowerCase()); // WCC-862 // UCS-3731
+            indexNameBuilder.append(
+                indexConfig.getIndexSegmentName().toLowerCase()); // WCC-862 // UCS-3731
           }
           break;
         case OFF:
@@ -144,7 +154,11 @@ public class DefaultIndexManager implements IndexManager {
     String newName = buildIndexName();
 
     if (!newName.equals(currentName)) {
-      LOGGER.debug("Index {} current name changed from {} to {}, updating configuration", aliasName, currentName, newName);
+      LOGGER.debug(
+          "Index {} current name changed from {} to {}, updating configuration",
+          aliasName,
+          currentName,
+          newName);
       index.setupIndex(newName);
       currentName = newName;
       LOGGER.warn("Index {}/{} configuration updated", aliasName, currentName);
@@ -152,8 +166,7 @@ public class DefaultIndexManager implements IndexManager {
   }
 
   @Override
-  public void updateOptions() {
-  }
+  public void updateOptions() {}
 
   @Override
   public boolean isTTLFieldRequired() {

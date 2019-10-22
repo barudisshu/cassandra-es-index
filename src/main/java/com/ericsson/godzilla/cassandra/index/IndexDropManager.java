@@ -1,17 +1,17 @@
 /*
-* Copyright Ericsson AB 2019 - All Rights Reserved.
-* The copyright to the computer program(s) herein is the property of Ericsson AB.
-* The programs may be used and/or copied only with written permission from Ericsson AB
-* or in accordance with the terms and conditions stipulated in the agreement/contract under which the program(s) have been supplied.
-*/
+ * Copyright Ericsson AB 2019 - All Rights Reserved.
+ * The copyright to the computer program(s) herein is the property of Ericsson AB.
+ * The programs may be used and/or copied only with written permission from Ericsson AB
+ * or in accordance with the terms and conditions stipulated in the agreement/contract under which the program(s) have been supplied.
+ */
 package com.ericsson.godzilla.cassandra.index;
 
 import com.ericsson.godzilla.cassandra.index.config.IndexConfig;
-
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nonnull;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -24,8 +24,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
-
-import javax.annotation.Nonnull;
 
 import static java.time.ZoneOffset.UTC;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -50,7 +48,8 @@ public class IndexDropManager implements IndexManager {
   // Make sure there is one thread per task
   private final AtomicInteger threadId = new AtomicInteger(0);
   private final ScheduledExecutorService scheduler =
-      Executors.newScheduledThreadPool(2, r -> new Thread(r, "IdxDrMgr-" + threadId.getAndIncrement()));
+      Executors.newScheduledThreadPool(
+          2, r -> new Thread(r, "IdxDrMgr-" + threadId.getAndIncrement()));
   private ScheduledFuture<?> ttlTask;
 
   private final ElasticIndex index;
@@ -61,21 +60,33 @@ public class IndexDropManager implements IndexManager {
   private long segmentFrame; // index segment frame in milliseconds
   private long ttlShift;
 
-  private static final long UPDATE_PERIOD = Long.getLong(IndexConfig.ES_CONFIG_PREFIX + "update-period", 60);
+  private static final long UPDATE_PERIOD =
+      Long.getLong(IndexConfig.ES_CONFIG_PREFIX + "update-period", 60);
 
-  public IndexDropManager(@Nonnull ElasticIndex index, @Nonnull IndexConfig indexConfig, @Nonnull String indexName) {
+  public IndexDropManager(
+      @Nonnull ElasticIndex index, @Nonnull IndexConfig indexConfig, @Nonnull String indexName) {
     this.index = index;
     this.indexConfig = indexConfig;
     this.tsFormat = new SimpleDateFormat(TIMESTAMP_FORMAT);
     this.tsFormat.setTimeZone(TimeZone.getTimeZone(UTC));
-    this.aliasName = (indexConfig.isPerIndexType() ? indexName + "_" + index.typeName : indexName).toLowerCase();
+    this.aliasName =
+        (indexConfig.isPerIndexType() ? indexName + "_" + index.typeName : indexName).toLowerCase();
     this.segmentFrame = getSegmentSize();
     this.ttlShift = indexConfig.getTtlShift();
     this.currentName = buildIndexName();
 
-    this.ttlTask = scheduler.scheduleAtFixedRate(new SafeRunnable(this::deleteExpired, "ttl", LOGGER), segmentFrame / 1000, segmentFrame / 1000, SECONDS);
+    this.ttlTask =
+        scheduler.scheduleAtFixedRate(
+            new SafeRunnable(this::deleteExpired, "ttl", LOGGER),
+            segmentFrame / 1000,
+            segmentFrame / 1000,
+            SECONDS);
 
-    scheduler.scheduleAtFixedRate(new SafeRunnable(this::checkForUpdate, "update", LOGGER), UPDATE_PERIOD, UPDATE_PERIOD, SECONDS);
+    scheduler.scheduleAtFixedRate(
+        new SafeRunnable(this::checkForUpdate, "update", LOGGER),
+        UPDATE_PERIOD,
+        UPDATE_PERIOD,
+        SECONDS);
   }
 
   @Nonnull
@@ -145,7 +156,8 @@ public class IndexDropManager implements IndexManager {
     if (ttlShift > 0) {
       LOGGER.debug("Expiration process started");
       long now = new Date().getTime();
-      Map<Long, String> timestamps = index.getIndexNames().stream().collect(Collectors.toMap(this::getTimestamp, e -> e));
+      Map<Long, String> timestamps =
+          index.getIndexNames().stream().collect(Collectors.toMap(this::getTimestamp, e -> e));
       List<Long> ts = timestamps.keySet().stream().sorted().collect(Collectors.toList());
       for (int i = 1; i < ts.size(); i++) {
         if (ts.get(i) + ttlShift * 1000 <= now) {
@@ -162,7 +174,11 @@ public class IndexDropManager implements IndexManager {
     String newName = buildIndexName();
 
     if (!newName.equals(currentName)) {
-      LOGGER.debug("Index {} current name changed from {} to {}, updating configuration", aliasName, currentName, newName);
+      LOGGER.debug(
+          "Index {} current name changed from {} to {}, updating configuration",
+          aliasName,
+          currentName,
+          newName);
       index.setupIndex(newName);
       currentName = newName;
       LOGGER.warn("Index {}/{} configuration updated", aliasName, currentName);
@@ -177,7 +193,12 @@ public class IndexDropManager implements IndexManager {
     if (ttlTask != null) {
       ttlTask.cancel(false);
     }
-    ttlTask = scheduler.scheduleAtFixedRate(new SafeRunnable(this::deleteExpired, "ttl", LOGGER), segmentFrame / 1000, segmentFrame / 1000, SECONDS);
+    ttlTask =
+        scheduler.scheduleAtFixedRate(
+            new SafeRunnable(this::deleteExpired, "ttl", LOGGER),
+            segmentFrame / 1000,
+            segmentFrame / 1000,
+            SECONDS);
   }
 
   @Override

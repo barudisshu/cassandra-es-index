@@ -1,15 +1,13 @@
 /*
-* Copyright Ericsson AB 2019 - All Rights Reserved.
-* The copyright to the computer program(s) herein is the property of Ericsson AB.
-* The programs may be used and/or copied only with written permission from Ericsson AB
-* or in accordance with the terms and conditions stipulated in the agreement/contract under which the program(s) have been supplied.
-*/
+ * Copyright Ericsson AB 2019 - All Rights Reserved.
+ * The copyright to the computer program(s) herein is the property of Ericsson AB.
+ * The programs may be used and/or copied only with written permission from Ericsson AB
+ * or in accordance with the terms and conditions stipulated in the agreement/contract under which the program(s) have been supplied.
+ */
 package com.ericsson.godzilla.cassandra.index.indexers;
 
-import com.google.common.base.Stopwatch;
-
 import com.ericsson.godzilla.cassandra.index.EsSecondaryIndex;
-
+import com.google.common.base.Stopwatch;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.DeletionTime;
 import org.apache.cassandra.db.rows.Row;
@@ -19,9 +17,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.TimeUnit;
 
-/**
- * This indexer handles inserts and updates but discards deletes
- */
+/** This indexer handles inserts and updates but discards deletes */
 public class EsIndexer extends NoOpIndexer {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(EsIndexer.class);
@@ -62,7 +58,8 @@ public class EsIndexer extends NoOpIndexer {
     if (delete) {
       Stopwatch time = Stopwatch.createStarted();
       index.delete(key);
-      LOGGER.debug("{} partitionDelete {} took {}ms", index.name, id, time.elapsed(TimeUnit.MILLISECONDS));
+      LOGGER.debug(
+          "{} partitionDelete {} took {}ms", index.name, id, time.elapsed(TimeUnit.MILLISECONDS));
     }
   }
 }
